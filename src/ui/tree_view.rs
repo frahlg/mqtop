@@ -6,13 +6,17 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{App, Panel};
+use crate::app::{App, FilterMode, Panel};
 use crate::state::TopicInfo;
 use super::bordered_block;
 
 pub fn render_tree(frame: &mut Frame, app: &App, area: Rect) {
     let focused = app.focused_panel == Panel::TopicTree;
-    let block = bordered_block("Topics", focused);
+    let title = match app.filter_mode {
+        FilterMode::All => "Topics",
+        FilterMode::Starred => "★ Starred",
+    };
+    let block = bordered_block(title, focused);
     let inner = block.inner(area);
 
     frame.render_widget(block, area);
@@ -36,7 +40,8 @@ pub fn render_tree(frame: &mut Frame, app: &App, area: Rect) {
         .enumerate()
         .map(|(i, topic)| {
             let is_selected = i == app.selected_topic_index;
-            create_topic_item(topic, is_selected, focused)
+            let is_starred = app.is_starred(&topic.full_path);
+            create_topic_item(topic, is_selected, focused, is_starred)
         })
         .collect();
 
@@ -53,8 +58,11 @@ pub fn render_tree(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_stateful_widget(list, inner, &mut state);
 }
 
-fn create_topic_item(topic: &TopicInfo, is_selected: bool, focused: bool) -> ListItem<'static> {
+fn create_topic_item(topic: &TopicInfo, is_selected: bool, focused: bool, is_starred: bool) -> ListItem<'static> {
     let indent = "  ".repeat(topic.depth);
+
+    // Star indicator
+    let star = if is_starred { "★ " } else { "" };
 
     // Determine icon based on topic type and state
     let icon = if topic.has_children {
@@ -81,6 +89,7 @@ fn create_topic_item(topic: &TopicInfo, is_selected: bool, focused: bool) -> Lis
 
     let line = Line::from(vec![
         Span::raw(indent),
+        Span::styled(star, Style::default().fg(Color::Yellow)),
         Span::styled(icon, Style::default().fg(Color::DarkGray)),
         Span::styled(topic.segment.clone(), style),
         Span::styled(count_str, Style::default().fg(Color::DarkGray)),

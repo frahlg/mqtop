@@ -91,17 +91,28 @@ fn render_header(frame: &mut Frame, app: &App, area: Rect) {
 fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     let mode_hint = match app.input_mode {
         InputMode::Normal => {
-            "q:Quit  /:Search  Tab:Panel  hjkl/↑↓←→:Navigate  Enter:Select  ?:Help  p:Payload mode"
+            "q:Quit /:Search s:Star *:Filter Tab:Panel hjkl:Nav ?:Help"
         }
         InputMode::Search => {
             "Enter:Select  Esc:Cancel  ↑↓:Navigate results"
         }
     };
 
+    // Check for status message first
+    if let Some(status) = app.get_status() {
+        let footer = Line::from(vec![
+            Span::styled(format!(" {} ", status), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::raw("│ "),
+            Span::styled(mode_hint, Style::default().fg(Color::DarkGray)),
+        ]);
+        frame.render_widget(Paragraph::new(footer), area);
+        return;
+    }
+
     let footer = if let Some(ref err) = app.last_error {
         Line::from(vec![
             Span::styled(" ERROR: ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
-            Span::styled(truncate_str(err, 60), Style::default().fg(Color::Red)),
+            Span::styled(truncate_str(err, 50), Style::default().fg(Color::Red)),
             Span::raw(" │ "),
             Span::raw(mode_hint),
         ])

@@ -4,6 +4,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 
 use crate::config::Config;
 use crate::mqtt::{ConnectionState, MqttEvent, MqttMessage};
+use crate::persistence::UserData;
 use crate::state::{MessageBuffer, Stats, TopicInfo, TopicTree};
 
 /// Current UI panel focus
@@ -21,10 +22,19 @@ pub enum InputMode {
     Search,
 }
 
+/// Filter mode for topic tree
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FilterMode {
+    All,
+    Starred,
+}
+
 /// Application state
 pub struct App {
     /// Configuration
     pub config: Config,
+    /// User data (persisted)
+    pub user_data: UserData,
     /// Topic tree
     pub topic_tree: TopicTree,
     /// Message buffer
@@ -41,6 +51,8 @@ pub struct App {
     pub focused_panel: Panel,
     /// Input mode
     pub input_mode: InputMode,
+    /// Filter mode
+    pub filter_mode: FilterMode,
     /// Search query
     pub search_query: String,
     /// Search results
@@ -63,6 +75,8 @@ pub struct App {
     pub show_help: bool,
     /// Payload display mode
     pub payload_mode: PayloadMode,
+    /// Status message (temporary)
+    pub status_message: Option<(String, std::time::Instant)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,9 +91,11 @@ impl App {
     pub fn new(config: Config) -> Self {
         let message_buffer_size = config.ui.message_buffer_size;
         let stats_window = config.ui.stats_window_secs;
+        let user_data = UserData::load();
 
         Self {
             config,
+            user_data,
             topic_tree: TopicTree::new(),
             message_buffer: MessageBuffer::new(message_buffer_size),
             stats: Stats::new(stats_window),
@@ -88,6 +104,7 @@ impl App {
             expanded_topics: HashSet::new(),
             focused_panel: Panel::TopicTree,
             input_mode: InputMode::Normal,
+            filter_mode: FilterMode::All,
             search_query: String::new(),
             search_results: Vec::new(),
             search_result_index: 0,
@@ -99,7 +116,62 @@ impl App {
             selected_topic: None,
             show_help: false,
             payload_mode: PayloadMode::Auto,
+            status_message: None,
         }
+    }
+
+    /// Save user data to disk
+    pub fn save_user_data(&self) {
+        if let Err(e) = self.user_data.save() {
+            tracing::error!("Failed to save user data: {:?}", e);
+        }
+    }
+
+    /// Set a temporary status message
+    pub fn set_status(&mut self, msg: &str) {
+        self.status_message = Some((msg.to_string(), std::time::Instant::now()));
+    }
+
+    /// Get status message if not expired (3 seconds)
+    pub fn get_status(&self) -> Option<&str> {
+        self.status_message.as_ref().and_then(|(msg, time)| {
+            if time.elapsed().as_secs() < 3 {
+                Some(msg.as_str())
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Toggle star for currently selected topic
+    pub fn toggle_star(&mut self) {
+        if let Some(topic) = &self.selected_topic.clone() {
+            let starred = self.user_data.toggle_star(topic);
+            self.set_status(if starred {
+                "★ Starred"
+            } else {
+                "☆ Unstarred"
+            });
+            self.save_user_data();
+        }
+    }
+
+    /// Check if a topic is starred
+    pub fn is_starred(&self, topic: &str) -> bool {
+        self.user_data.is_starred(topic)
+    }
+
+    /// Toggle filter mode
+    pub fn toggle_filter_mode(&mut self) {
+        self.filter_mode = match self.filter_mode {
+            FilterMode::All => FilterMode::Starred,
+            FilterMode::Starred => FilterMode::All,
+        };
+        self.selected_topic_index = 0;
+        self.set_status(match self.filter_mode {
+            FilterMode::All => "Showing all topics",
+            FilterMode::Starred => "Showing starred only",
+        });
     }
 
     /// Process an MQTT event
@@ -214,6 +286,12 @@ impl App {
 
             // Clear stats
             KeyCode::Char('c') => self.stats.reset(),
+
+            // Star current topic
+            KeyCode::Char('s') => self.toggle_star(),
+
+            // Toggle starred filter
+            KeyCode::Char('*') => self.toggle_filter_mode(),
 
             // Navigation (vim-style + arrows)
             KeyCode::Down | KeyCode::Char('j') => self.move_down(),
@@ -444,7 +522,15 @@ impl App {
 
     /// Get visible topics for rendering
     pub fn get_visible_topics(&self) -> Vec<TopicInfo> {
-        self.topic_tree.get_visible_topics(&self.expanded_topics)
+        let topics = self.topic_tree.get_visible_topics(&self.expanded_topics);
+
+        match self.filter_mode {
+            FilterMode::All => topics,
+            FilterMode::Starred => topics
+                .into_iter()
+                .filter(|t| self.user_data.is_starred(&t.full_path))
+                .collect(),
+        }
     }
 
     /// Get messages for currently selected topic

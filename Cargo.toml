@@ -38,6 +38,12 @@ chrono = { version = "0.4", features = ["serde"] }
 # Fuzzy search
 fuzzy-matcher = "0.3"
 
+# Directories
+dirs = "5"
+
+# Clipboard
+arboard = "3"
+
 # TLS support
 rustls = "0.23"
 

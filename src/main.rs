@@ -1,6 +1,7 @@
 mod app;
 mod config;
 mod mqtt;
+mod persistence;
 mod state;
 mod ui;
 
