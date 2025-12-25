@@ -5,7 +5,8 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use crate::config::Config;
 use crate::mqtt::{ConnectionState, MqttEvent, MqttMessage};
 use crate::persistence::UserData;
-use crate::state::{MessageBuffer, Stats, TopicInfo, TopicTree};
+use crate::state::{get_numeric_fields, DeviceTracker, MessageBuffer, MetricTracker, Stats, TopicInfo, TopicTree};
+use crate::state::metric_tracker::topic_matches;
 
 /// Current UI panel focus
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,6 +21,8 @@ pub enum Panel {
 pub enum InputMode {
     Normal,
     Search,
+    MetricSelect,
+    Filter,
 }
 
 /// Filter mode for topic tree
@@ -77,6 +80,18 @@ pub struct App {
     pub payload_mode: PayloadMode,
     /// Status message (temporary)
     pub status_message: Option<(String, std::time::Instant)>,
+    /// Metric tracker
+    pub metric_tracker: MetricTracker,
+    /// Device health tracker
+    pub device_tracker: DeviceTracker,
+    /// Available numeric fields for metric selection
+    pub available_fields: Vec<(String, f64)>,
+    /// Selected field index in metric selection mode
+    pub metric_select_index: usize,
+    /// Topic filter pattern (MQTT wildcard syntax)
+    pub topic_filter: Option<String>,
+    /// Filter input buffer
+    pub filter_input: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -117,6 +132,12 @@ impl App {
             show_help: false,
             payload_mode: PayloadMode::Auto,
             status_message: None,
+            metric_tracker: MetricTracker::new(100), // Keep last 100 data points
+            device_tracker: DeviceTracker::new(),
+            available_fields: Vec::new(),
+            metric_select_index: 0,
+            topic_filter: None,
+            filter_input: String::new(),
         }
     }
 
@@ -180,6 +201,10 @@ impl App {
             MqttEvent::Message(msg) => {
                 self.stats.record_message(msg.payload_size());
                 self.topic_tree.insert(&msg.topic, msg.payload_size());
+                // Process for metric tracking
+                self.metric_tracker.process_message(&msg.topic, &msg.payload);
+                // Process for device health tracking
+                self.device_tracker.process_message(&msg.topic, msg.payload_size());
                 self.message_buffer.push(msg);
             }
             MqttEvent::StateChange(state) => {
@@ -199,7 +224,149 @@ impl App {
         match self.input_mode {
             InputMode::Search => self.handle_search_input(code, modifiers),
             InputMode::Normal => self.handle_normal_input(code, modifiers),
+            InputMode::MetricSelect => self.handle_metric_select_input(code, modifiers),
+            InputMode::Filter => self.handle_filter_input(code, modifiers),
         }
+    }
+
+    fn handle_metric_select_input(&mut self, code: KeyCode, _modifiers: KeyModifiers) {
+        match code {
+            KeyCode::Esc => {
+                self.input_mode = InputMode::Normal;
+                self.available_fields.clear();
+            }
+            KeyCode::Enter => {
+                if let Some((field, _)) = self.available_fields.get(self.metric_select_index) {
+                    if let Some(topic) = &self.selected_topic {
+                        // Create a label for the metric
+                        let label = format!("{}", field);
+                        self.metric_tracker.track(
+                            label.clone(),
+                            topic.clone(),
+                            field.clone(),
+                        );
+                        self.set_status(&format!("Tracking: {}", label));
+                    }
+                }
+                self.input_mode = InputMode::Normal;
+                self.available_fields.clear();
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if !self.available_fields.is_empty() {
+                    self.metric_select_index =
+                        (self.metric_select_index + 1) % self.available_fields.len();
+                }
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if !self.available_fields.is_empty() {
+                    self.metric_select_index = self.metric_select_index
+                        .checked_sub(1)
+                        .unwrap_or(self.available_fields.len() - 1);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Enter metric selection mode
+    pub fn enter_metric_select(&mut self) {
+        // Get the current message's JSON fields
+        let messages = self.get_current_messages();
+        if let Some(msg) = messages.first() {
+            if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&msg.payload) {
+                self.available_fields = get_numeric_fields(&json);
+                if !self.available_fields.is_empty() {
+                    self.input_mode = InputMode::MetricSelect;
+                    self.metric_select_index = 0;
+                } else {
+                    self.set_status("No numeric fields found");
+                }
+            } else {
+                self.set_status("Payload is not JSON");
+            }
+        } else {
+            self.set_status("No message selected");
+        }
+    }
+
+    /// Remove a tracked metric
+    pub fn remove_metric(&mut self, label: &str) {
+        self.metric_tracker.untrack(label);
+        self.set_status(&format!("Stopped tracking: {}", label));
+    }
+
+    /// Copy current topic to clipboard
+    pub fn copy_topic(&mut self) {
+        if let Some(topic) = &self.selected_topic {
+            match arboard::Clipboard::new() {
+                Ok(mut clipboard) => {
+                    if clipboard.set_text(topic.clone()).is_ok() {
+                        self.set_status("Topic copied to clipboard");
+                    } else {
+                        self.set_status("Failed to copy topic");
+                    }
+                }
+                Err(_) => self.set_status("Clipboard unavailable"),
+            }
+        } else {
+            self.set_status("No topic selected");
+        }
+    }
+
+    /// Copy current payload to clipboard
+    pub fn copy_payload(&mut self) {
+        let messages = self.get_current_messages();
+        if let Some(msg) = messages.first() {
+            let payload = self.format_payload(msg);
+            match arboard::Clipboard::new() {
+                Ok(mut clipboard) => {
+                    if clipboard.set_text(payload).is_ok() {
+                        self.set_status("Payload copied to clipboard");
+                    } else {
+                        self.set_status("Failed to copy payload");
+                    }
+                }
+                Err(_) => self.set_status("Clipboard unavailable"),
+            }
+        } else {
+            self.set_status("No message to copy");
+        }
+    }
+
+    fn handle_filter_input(&mut self, code: KeyCode, _modifiers: KeyModifiers) {
+        match code {
+            KeyCode::Esc => {
+                self.input_mode = InputMode::Normal;
+                self.filter_input.clear();
+            }
+            KeyCode::Enter => {
+                if self.filter_input.is_empty() {
+                    self.topic_filter = None;
+                    self.set_status("Filter cleared");
+                } else {
+                    self.topic_filter = Some(self.filter_input.clone());
+                    self.set_status(&format!("Filter: {}", self.filter_input));
+                }
+                self.input_mode = InputMode::Normal;
+                self.filter_input.clear();
+                self.selected_topic_index = 0;
+            }
+            KeyCode::Backspace => {
+                self.filter_input.pop();
+            }
+            KeyCode::Char(c) => {
+                self.filter_input.push(c);
+            }
+            _ => {}
+        }
+    }
+
+    /// Clear the topic filter
+    pub fn clear_filter(&mut self) {
+        self.topic_filter = None;
+        self.filter_input.clear();
+        self.set_status("Filter cleared");
+        self.selected_topic_index = 0;
     }
 
     fn handle_search_input(&mut self, code: KeyCode, _modifiers: KeyModifiers) {
@@ -292,6 +459,20 @@ impl App {
 
             // Toggle starred filter
             KeyCode::Char('*') => self.toggle_filter_mode(),
+
+            // Track metric from current message
+            KeyCode::Char('m') => self.enter_metric_select(),
+
+            // Copy to clipboard
+            KeyCode::Char('y') => self.copy_topic(),
+            KeyCode::Char('Y') => self.copy_payload(),
+
+            // Topic filter
+            KeyCode::Char('f') => {
+                self.input_mode = InputMode::Filter;
+                self.filter_input = self.topic_filter.clone().unwrap_or_default();
+            }
+            KeyCode::Char('F') => self.clear_filter(),
 
             // Navigation (vim-style + arrows)
             KeyCode::Down | KeyCode::Char('j') => self.move_down(),
@@ -524,12 +705,23 @@ impl App {
     pub fn get_visible_topics(&self) -> Vec<TopicInfo> {
         let topics = self.topic_tree.get_visible_topics(&self.expanded_topics);
 
-        match self.filter_mode {
+        // Apply starred filter
+        let topics = match self.filter_mode {
             FilterMode::All => topics,
             FilterMode::Starred => topics
                 .into_iter()
                 .filter(|t| self.user_data.is_starred(&t.full_path))
                 .collect(),
+        };
+
+        // Apply topic pattern filter
+        if let Some(pattern) = &self.topic_filter {
+            topics
+                .into_iter()
+                .filter(|t| topic_matches(pattern, &t.full_path))
+                .collect()
+        } else {
+            topics
         }
     }
 

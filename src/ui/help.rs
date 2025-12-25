@@ -63,6 +63,34 @@ pub fn render_help(frame: &mut Frame) {
             Span::raw("Open search"),
         ]),
         Line::from(vec![
+            Span::styled("  s           ", Style::default().fg(Color::Yellow)),
+            Span::raw("Star/unstar current topic"),
+        ]),
+        Line::from(vec![
+            Span::styled("  *           ", Style::default().fg(Color::Yellow)),
+            Span::raw("Toggle starred topics filter"),
+        ]),
+        Line::from(vec![
+            Span::styled("  f           ", Style::default().fg(Color::Yellow)),
+            Span::raw("Set topic filter (MQTT wildcards)"),
+        ]),
+        Line::from(vec![
+            Span::styled("  F           ", Style::default().fg(Color::Yellow)),
+            Span::raw("Clear topic filter"),
+        ]),
+        Line::from(vec![
+            Span::styled("  m           ", Style::default().fg(Color::Yellow)),
+            Span::raw("Track metric from current message"),
+        ]),
+        Line::from(vec![
+            Span::styled("  y           ", Style::default().fg(Color::Yellow)),
+            Span::raw("Copy topic to clipboard"),
+        ]),
+        Line::from(vec![
+            Span::styled("  Y           ", Style::default().fg(Color::Yellow)),
+            Span::raw("Copy payload to clipboard"),
+        ]),
+        Line::from(vec![
             Span::styled("  Esc         ", Style::default().fg(Color::Yellow)),
             Span::raw("Cancel search / Close help"),
         ]),

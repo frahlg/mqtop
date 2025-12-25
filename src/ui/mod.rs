@@ -3,6 +3,8 @@ mod message_view;
 mod stats_view;
 mod search;
 mod help;
+mod metric_select;
+mod filter;
 
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -19,6 +21,8 @@ pub use message_view::render_messages;
 pub use stats_view::render_stats;
 pub use search::render_search;
 pub use help::render_help;
+pub use metric_select::render_metric_select;
+pub use filter::render_filter;
 
 /// Main render function
 pub fn render(frame: &mut Frame, app: &App) {
@@ -60,6 +64,14 @@ pub fn render(frame: &mut Frame, app: &App) {
         render_search(frame, app);
     }
 
+    if app.input_mode == InputMode::MetricSelect {
+        render_metric_select(frame, app);
+    }
+
+    if app.input_mode == InputMode::Filter {
+        render_filter(frame, app);
+    }
+
     if app.show_help {
         render_help(frame);
     }
@@ -91,10 +103,16 @@ fn render_header(frame: &mut Frame, app: &App, area: Rect) {
 fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     let mode_hint = match app.input_mode {
         InputMode::Normal => {
-            "q:Quit /:Search s:Star *:Filter Tab:Panel hjkl:Nav ?:Help"
+            "q:Quit /:Search f:Filter s:Star y:Copy m:Track ?:Help"
         }
         InputMode::Search => {
             "Enter:Select  Esc:Cancel  ↑↓:Navigate results"
+        }
+        InputMode::MetricSelect => {
+            "Enter:Track  Esc:Cancel  ↑↓/jk:Navigate"
+        }
+        InputMode::Filter => {
+            "Enter:Apply  Esc:Cancel  (empty to clear)"
         }
     };
 

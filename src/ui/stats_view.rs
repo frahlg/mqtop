@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::app::{App, Panel};
-use crate::state::Stats;
+use crate::state::{render_sparkline, HealthStatus, Stats};
 use super::bordered_block;
 
 pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
@@ -163,6 +163,133 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
         ]));
     }
 
+    // Device Health section
+    let device_count = app.device_tracker.device_count();
+    if device_count > 0 {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("Device Health", Style::default().add_modifier(Modifier::BOLD).fg(Color::Green)),
+        ]));
+
+        let (healthy, warning, stale, unknown) = app.device_tracker.count_by_status();
+        lines.push(Line::from(vec![
+            Span::styled("  ● ", Style::default().fg(Color::Green)),
+            Span::styled(format!("{} healthy", healthy), Style::default().fg(Color::White)),
+            Span::raw("  "),
+            Span::styled("● ", Style::default().fg(Color::Yellow)),
+            Span::styled(format!("{} warn", warning), Style::default().fg(Color::White)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("  ● ", Style::default().fg(Color::Red)),
+            Span::styled(format!("{} stale", stale), Style::default().fg(Color::White)),
+            Span::raw("  "),
+            Span::styled("● ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{} new", unknown), Style::default().fg(Color::White)),
+        ]));
+
+        // Show top 3 most recent devices
+        let devices = app.device_tracker.get_devices();
+        if !devices.is_empty() {
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled("  Recent:", Style::default().fg(Color::DarkGray)),
+            ]));
+
+            for device in devices.iter().take(3) {
+                let status_color = match device.status {
+                    HealthStatus::Healthy => Color::Green,
+                    HealthStatus::Warning => Color::Yellow,
+                    HealthStatus::Stale => Color::Red,
+                    HealthStatus::Unknown => Color::DarkGray,
+                };
+                let status_char = match device.status {
+                    HealthStatus::Healthy => "●",
+                    HealthStatus::Warning => "●",
+                    HealthStatus::Stale => "○",
+                    HealthStatus::Unknown => "◌",
+                };
+
+                // Truncate device ID for display
+                let display_id = if device.device_id.len() > 12 {
+                    format!("{}...", &device.device_id[..12])
+                } else {
+                    device.device_id.clone()
+                };
+
+                lines.push(Line::from(vec![
+                    Span::styled(format!("  {} ", status_char), Style::default().fg(status_color)),
+                    Span::styled(display_id, Style::default().fg(Color::White)),
+                ]));
+                lines.push(Line::from(vec![
+                    Span::styled(
+                        format!("    {} | {}", device.last_seen_string(), device.message_count),
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                ]));
+            }
+
+            if devices.len() > 3 {
+                lines.push(Line::from(vec![
+                    Span::styled(
+                        format!("  ... +{} more", devices.len() - 3),
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                ]));
+            }
+        }
+    }
+
+    // Tracked Metrics section
+    let metrics = app.metric_tracker.get_metrics();
+    if !metrics.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("Tracked Metrics", Style::default().add_modifier(Modifier::BOLD).fg(Color::Magenta)),
+            Span::styled(" (m to add)", Style::default().fg(Color::DarkGray)),
+        ]));
+
+        for metric in metrics {
+            // Metric label and current value
+            let current = metric.latest().map(|v| format_metric_value(v)).unwrap_or_else(|| "---".to_string());
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {}: ", metric.label), Style::default().fg(Color::White)),
+                Span::styled(current, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            ]));
+
+            // Sparkline (use available width)
+            let sparkline_width = 20;
+            let sparkline_data = metric.sparkline_data(sparkline_width);
+            let sparkline_str = render_sparkline(&sparkline_data, sparkline_width);
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(sparkline_str, Style::default().fg(Color::Magenta)),
+            ]));
+
+            // Min/Max/Avg stats
+            if metric.count > 0 {
+                lines.push(Line::from(vec![
+                    Span::styled("  min:", Style::default().fg(Color::DarkGray)),
+                    Span::styled(format_metric_value(metric.min), Style::default().fg(Color::Blue)),
+                    Span::styled(" max:", Style::default().fg(Color::DarkGray)),
+                    Span::styled(format_metric_value(metric.max), Style::default().fg(Color::Red)),
+                    Span::styled(" avg:", Style::default().fg(Color::DarkGray)),
+                    Span::styled(format_metric_value(metric.avg()), Style::default().fg(Color::Yellow)),
+                ]));
+            }
+            lines.push(Line::from(""));
+        }
+    } else {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("Metrics", Style::default().fg(Color::DarkGray)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("  Press ", Style::default().fg(Color::DarkGray)),
+            Span::styled("m", Style::default().fg(Color::Yellow)),
+            Span::styled(" to track", Style::default().fg(Color::DarkGray)),
+        ]));
+    }
+
     let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false });
     frame.render_widget(paragraph, inner);
 }
@@ -174,5 +301,17 @@ fn format_number(n: u64) -> String {
         format!("{:.1}k", n as f64 / 1_000.0)
     } else {
         n.to_string()
+    }
+}
+
+fn format_metric_value(v: f64) -> String {
+    if v.abs() >= 1_000_000.0 {
+        format!("{:.2}M", v / 1_000_000.0)
+    } else if v.abs() >= 1_000.0 {
+        format!("{:.1}k", v / 1_000.0)
+    } else if v.fract() == 0.0 {
+        format!("{:.0}", v)
+    } else {
+        format!("{:.2}", v)
     }
 }
