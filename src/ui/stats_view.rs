@@ -59,6 +59,45 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
     ]));
     lines.push(Line::from(""));
 
+    // Tracked Metrics section - placed high so it's always visible
+    let metrics = app.metric_tracker.get_metrics();
+    if !metrics.is_empty() {
+        lines.push(Line::from(vec![
+            Span::styled("Tracked Metrics", Style::default().add_modifier(Modifier::BOLD).fg(Color::Magenta)),
+        ]));
+
+        for metric in metrics {
+            // Metric label and current value
+            let current = metric.latest().map(|v| format_metric_value(v)).unwrap_or_else(|| "---".to_string());
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {}: ", metric.label), Style::default().fg(Color::White)),
+                Span::styled(current, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            ]));
+
+            // Sparkline
+            let sparkline_width = 20;
+            let sparkline_data = metric.sparkline_data(sparkline_width);
+            let sparkline_str = render_sparkline(&sparkline_data, sparkline_width);
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(sparkline_str, Style::default().fg(Color::Magenta)),
+            ]));
+
+            // Min/Max/Avg stats on one line
+            if metric.count > 0 {
+                lines.push(Line::from(vec![
+                    Span::styled("  min:", Style::default().fg(Color::DarkGray)),
+                    Span::styled(format_metric_value(metric.min), Style::default().fg(Color::Blue)),
+                    Span::styled(" max:", Style::default().fg(Color::DarkGray)),
+                    Span::styled(format_metric_value(metric.max), Style::default().fg(Color::Red)),
+                    Span::styled(" avg:", Style::default().fg(Color::DarkGray)),
+                    Span::styled(format_metric_value(metric.avg()), Style::default().fg(Color::Yellow)),
+                ]));
+            }
+        }
+        lines.push(Line::from(""));
+    }
+
     // Data stats
     lines.push(Line::from(vec![
         Span::styled("Data", Style::default().add_modifier(Modifier::BOLD)),
@@ -300,58 +339,19 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
         }
     }
 
-    // Tracked Metrics section
-    let metrics = app.metric_tracker.get_metrics();
-    if !metrics.is_empty() {
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled("Tracked Metrics", Style::default().add_modifier(Modifier::BOLD).fg(Color::Magenta)),
-            Span::styled(" (m to add)", Style::default().fg(Color::DarkGray)),
-        ]));
+    // Add scroll indicator if content exceeds panel height
+    let total_lines = lines.len();
+    let visible_height = inner.height as usize;
 
-        for metric in metrics {
-            // Metric label and current value
-            let current = metric.latest().map(|v| format_metric_value(v)).unwrap_or_else(|| "---".to_string());
-            lines.push(Line::from(vec![
-                Span::styled(format!("  {}: ", metric.label), Style::default().fg(Color::White)),
-                Span::styled(current, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            ]));
-
-            // Sparkline (use available width)
-            let sparkline_width = 20;
-            let sparkline_data = metric.sparkline_data(sparkline_width);
-            let sparkline_str = render_sparkline(&sparkline_data, sparkline_width);
-            lines.push(Line::from(vec![
-                Span::raw("  "),
-                Span::styled(sparkline_str, Style::default().fg(Color::Magenta)),
-            ]));
-
-            // Min/Max/Avg stats
-            if metric.count > 0 {
-                lines.push(Line::from(vec![
-                    Span::styled("  min:", Style::default().fg(Color::DarkGray)),
-                    Span::styled(format_metric_value(metric.min), Style::default().fg(Color::Blue)),
-                    Span::styled(" max:", Style::default().fg(Color::DarkGray)),
-                    Span::styled(format_metric_value(metric.max), Style::default().fg(Color::Red)),
-                    Span::styled(" avg:", Style::default().fg(Color::DarkGray)),
-                    Span::styled(format_metric_value(metric.avg()), Style::default().fg(Color::Yellow)),
-                ]));
-            }
-            lines.push(Line::from(""));
-        }
+    let paragraph = if total_lines > visible_height {
+        // Apply scroll offset from app state
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: false })
+            .scroll((app.stats_scroll as u16, 0))
     } else {
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled("Metrics", Style::default().fg(Color::DarkGray)),
-        ]));
-        lines.push(Line::from(vec![
-            Span::styled("  Press ", Style::default().fg(Color::DarkGray)),
-            Span::styled("m", Style::default().fg(Color::Yellow)),
-            Span::styled(" to track", Style::default().fg(Color::DarkGray)),
-        ]));
-    }
+        Paragraph::new(lines).wrap(Wrap { trim: false })
+    };
 
-    let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false });
     frame.render_widget(paragraph, inner);
 }
 

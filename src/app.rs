@@ -72,6 +72,8 @@ pub struct App {
     pub tree_scroll: usize,
     /// Scroll offset for messages
     pub message_scroll: usize,
+    /// Scroll offset for stats panel
+    pub stats_scroll: usize,
     /// Currently selected topic (full path)
     pub selected_topic: Option<String>,
     /// Show help overlay
@@ -132,6 +134,7 @@ impl App {
             should_quit: false,
             tree_scroll: 0,
             message_scroll: 0,
+            stats_scroll: 0,
             selected_topic: None,
             show_help: false,
             payload_mode: PayloadMode::Auto,
@@ -552,7 +555,9 @@ impl App {
                     self.selected_message_index += 1;
                 }
             }
-            Panel::Stats => {}
+            Panel::Stats => {
+                self.stats_scroll = self.stats_scroll.saturating_add(1);
+            }
         }
     }
 
@@ -569,7 +574,9 @@ impl App {
                     self.selected_message_index -= 1;
                 }
             }
-            Panel::Stats => {}
+            Panel::Stats => {
+                self.stats_scroll = self.stats_scroll.saturating_sub(1);
+            }
         }
     }
 
@@ -647,7 +654,9 @@ impl App {
             Panel::Messages => {
                 self.selected_message_index = 0;
             }
-            Panel::Stats => {}
+            Panel::Stats => {
+                self.stats_scroll = 0;
+            }
         }
     }
 
@@ -666,7 +675,9 @@ impl App {
                     self.selected_message_index = count - 1;
                 }
             }
-            Panel::Stats => {}
+            Panel::Stats => {
+                self.stats_scroll = 100; // Scroll to approximate bottom
+            }
         }
     }
 
