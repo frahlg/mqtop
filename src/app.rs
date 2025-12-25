@@ -5,7 +5,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use crate::config::Config;
 use crate::mqtt::{ConnectionState, MqttEvent, MqttMessage};
 use crate::persistence::UserData;
-use crate::state::{get_numeric_fields, ChangeType, DeviceTracker, LatencyTracker, MessageBuffer, MetricTracker, SchemaTracker, Stats, TopicInfo, TopicTree};
+use crate::state::{get_numeric_fields, DeviceTracker, LatencyTracker, MessageBuffer, MetricTracker, SchemaTracker, Stats, TopicInfo, TopicTree};
 use crate::state::metric_tracker::topic_matches;
 
 /// Current UI panel focus
@@ -213,17 +213,8 @@ impl App {
                 self.device_tracker.process_message(&msg.topic, msg.payload_size());
                 // Process for latency tracking
                 self.latency_tracker.record_message(&msg.payload);
-                // Process for schema change detection
-                let schema_changes = self.schema_tracker.process_message(&msg.topic, &msg.payload);
-                if !schema_changes.is_empty() {
-                    let change = &schema_changes[0];
-                    let msg = match change.change_type {
-                        ChangeType::FieldAdded => format!("Schema +{}", change.field_path),
-                        ChangeType::FieldRemoved => format!("Schema -{}", change.field_path),
-                        ChangeType::TypeChanged => format!("Schema ~{}", change.field_path),
-                    };
-                    self.set_status(&msg);
-                }
+                // Process for schema tracking (silent - no notifications)
+                let _ = self.schema_tracker.process_message(&msg.topic, &msg.payload);
                 self.message_buffer.push(msg);
             }
             MqttEvent::StateChange(state) => {
@@ -257,14 +248,16 @@ impl App {
             KeyCode::Enter => {
                 if let Some((field, _)) = self.available_fields.get(self.metric_select_index) {
                     if let Some(topic) = &self.selected_topic {
-                        // Create a label for the metric
-                        let label = format!("{}", field);
+                        // Create a wildcard pattern to match similar topics
+                        // e.g., telemetry/device123/meter/zap/json -> telemetry/+/meter/+/json
+                        let pattern = create_wildcard_pattern(topic);
+                        let label = format!("{} ({})", field, short_topic(topic));
                         self.metric_tracker.track(
                             label.clone(),
-                            topic.clone(),
+                            pattern,
                             field.clone(),
                         );
-                        self.set_status(&format!("Tracking: {}", label));
+                        self.set_status(&format!("Tracking: {}", field));
                     }
                 }
                 self.input_mode = InputMode::Normal;
@@ -796,5 +789,40 @@ impl App {
             ConnectionState::Connected => Color::Green,
             ConnectionState::Reconnecting => Color::Yellow,
         }
+    }
+}
+
+/// Create a wildcard pattern from a specific topic
+/// Replaces segments that look like IDs with + wildcards
+/// e.g., "telemetry/zap-0000d8c467e385a0/meter/zap/json" -> "telemetry/+/meter/+/json"
+fn create_wildcard_pattern(topic: &str) -> String {
+    topic
+        .split('/')
+        .map(|segment| {
+            // Replace segments that look like device IDs or UUIDs
+            if segment.len() > 8 && (
+                segment.contains('-') ||  // UUIDs or device IDs like zap-0000d8c467e385a0
+                segment.chars().all(|c| c.is_ascii_hexdigit()) ||  // Hex strings
+                segment.starts_with("zap-") ||
+                segment.starts_with("dev-") ||
+                segment.parse::<u64>().is_ok()  // Numeric IDs
+            ) {
+                "+".to_string()
+            } else {
+                segment.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+/// Get a short version of a topic for display
+fn short_topic(topic: &str) -> String {
+    let parts: Vec<&str> = topic.split('/').collect();
+    if parts.len() <= 2 {
+        topic.to_string()
+    } else {
+        // Show first and last parts
+        format!("{}/..", parts[0])
     }
 }

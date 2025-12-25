@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::app::{App, Panel};
-use crate::state::{render_sparkline, ChangeType, HealthStatus, LatencyTracker, Stats};
+use crate::state::{render_sparkline, HealthStatus, LatencyTracker, Stats};
 use super::bordered_block;
 
 pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
@@ -176,51 +176,6 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
                     Style::default().fg(if jitter.as_millis() > 500 { Color::Yellow } else { Color::White }),
                 ),
             ]));
-        }
-    }
-
-    // Schema changes (show if any recent changes)
-    let recent_changes = app.schema_tracker.recent_changes();
-    if !recent_changes.is_empty() {
-        // Only show changes from last 60 seconds
-        let recent: Vec<_> = recent_changes
-            .iter()
-            .filter(|c| c.timestamp.elapsed().as_secs() < 60)
-            .collect();
-
-        if !recent.is_empty() {
-            lines.push(Line::from(""));
-            lines.push(Line::from(vec![
-                Span::styled("Schema Changes", Style::default().add_modifier(Modifier::BOLD).fg(Color::Yellow)),
-            ]));
-
-            for change in recent.iter().take(3) {
-                let (symbol, color) = match change.change_type {
-                    ChangeType::FieldAdded => ("+", Color::Green),
-                    ChangeType::FieldRemoved => ("-", Color::Red),
-                    ChangeType::TypeChanged => ("~", Color::Yellow),
-                };
-
-                let field_display = if change.field_path.len() > 15 {
-                    format!("{}...", &change.field_path[..12])
-                } else {
-                    change.field_path.clone()
-                };
-
-                lines.push(Line::from(vec![
-                    Span::styled(format!("  {} ", symbol), Style::default().fg(color)),
-                    Span::styled(field_display, Style::default().fg(Color::White)),
-                ]));
-            }
-
-            if recent.len() > 3 {
-                lines.push(Line::from(vec![
-                    Span::styled(
-                        format!("  +{} more", recent.len() - 3),
-                        Style::default().fg(Color::DarkGray),
-                    ),
-                ]));
-            }
         }
     }
 
