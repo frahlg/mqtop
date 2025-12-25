@@ -57,7 +57,21 @@ Binary will be at `target/release/datafeeder` (3MB).
 
 ### Pre-built binaries
 
-Coming soon for macOS, Linux, and Windows.
+Download from [GitHub Releases](https://github.com/srcfl/datafeeder/releases):
+
+| Platform | Download |
+|----------|----------|
+| macOS (Apple Silicon) | `datafeeder-macos-arm64` |
+| macOS (Intel) | `datafeeder-macos-x64` |
+| Linux (x64) | `datafeeder-linux-x64` |
+| Linux (ARM64/Raspberry Pi) | `datafeeder-linux-arm64` |
+| Windows | `datafeeder-windows-x64.exe` |
+
+```bash
+# macOS/Linux: Make executable after download
+chmod +x datafeeder-*
+./datafeeder-macos-arm64 --help
+```
 
 ## Quick Start
 

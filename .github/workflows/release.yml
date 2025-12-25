@@ -1,0 +1,130 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v0.1.0)'
+        required: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS Apple Silicon
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: datafeeder
+            asset_name: datafeeder-macos-arm64
+
+          # macOS Intel
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: datafeeder
+            asset_name: datafeeder-macos-x64
+
+          # Linux x64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: datafeeder
+            asset_name: datafeeder-linux-x64
+
+          # Linux ARM64 (for Raspberry Pi, etc.)
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact_name: datafeeder
+            asset_name: datafeeder-linux-arm64
+
+          # Windows x64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: datafeeder.exe
+            asset_name: datafeeder-windows-x64.exe
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          # macOS ARM64
+          cp artifacts/datafeeder-macos-arm64/datafeeder release/datafeeder-macos-arm64
+          chmod +x release/datafeeder-macos-arm64
+          # macOS x64
+          cp artifacts/datafeeder-macos-x64/datafeeder release/datafeeder-macos-x64
+          chmod +x release/datafeeder-macos-x64
+          # Linux x64
+          cp artifacts/datafeeder-linux-x64/datafeeder release/datafeeder-linux-x64
+          chmod +x release/datafeeder-linux-x64
+          # Linux ARM64
+          cp artifacts/datafeeder-linux-arm64/datafeeder release/datafeeder-linux-arm64
+          chmod +x release/datafeeder-linux-arm64
+          # Windows
+          cp artifacts/datafeeder-windows-x64.exe/datafeeder.exe release/datafeeder-windows-x64.exe
+
+      - name: Create checksums
+        run: |
+          cd release
+          sha256sum * > checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release/datafeeder-macos-arm64
+            release/datafeeder-macos-x64
+            release/datafeeder-linux-x64
+            release/datafeeder-linux-arm64
+            release/datafeeder-windows-x64.exe
+            release/checksums.txt
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
