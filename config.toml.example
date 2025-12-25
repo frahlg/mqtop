@@ -1,0 +1,38 @@
+# Sourceful MQTT Explorer Configuration
+
+[mqtt]
+# VerneMQ broker host
+host = "mqtt.sourceful.energy"
+port = 8883
+use_tls = true
+
+# Client ID for MQTT connection
+client_id = "datafeeder-explorer"
+
+# Username for MQTT auth (defaults to client_id if not set)
+# username = "your-username"
+
+# Token goes in password field
+# Can also be set via MQTT_TOKEN environment variable
+token = "your-jwt-token-here"
+
+# Topic to subscribe to (default: # for all topics)
+# Examples:
+#   "#" - All topics
+#   "telemetry/#" - All telemetry
+#   "sites/#" - All site data
+#   "telemetry/+/meter/#" - All meter telemetry
+subscribe_topic = "#"
+
+# Keep-alive interval in seconds
+keep_alive_secs = 30
+
+[ui]
+# Messages to buffer per topic
+message_buffer_size = 100
+
+# Window for rate calculations (seconds)
+stats_window_secs = 10
+
+# UI refresh rate (milliseconds)
+tick_rate_ms = 100

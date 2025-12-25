@@ -1,0 +1,58 @@
+[package]
+name = "datafeeder"
+version = "0.1.0"
+edition = "2021"
+description = "High-performance MQTT explorer and ingestion server"
+authors = ["DataFeeder Team"]
+
+[dependencies]
+# MQTT client
+rumqttc = "0.24"
+
+# TUI
+ratatui = "0.29"
+crossterm = "0.28"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Config & serialization
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+serde_json = "1"
+
+# CLI args
+clap = { version = "4", features = ["derive"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Fuzzy search
+fuzzy-matcher = "0.3"
+
+# TLS support
+rustls = "0.23"
+
+[dev-dependencies]
+# Testing
+tokio-test = "0.4"
+mockall = "0.13"
+assert_matches = "1.5"
+tempfile = "3"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"

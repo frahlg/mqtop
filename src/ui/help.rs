@@ -1,0 +1,156 @@
+use ratatui::{
+    layout::{Constraint, Direction, Layout, Rect},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, Borders, Clear, Paragraph},
+    Frame,
+};
+
+pub fn render_help(frame: &mut Frame) {
+    let area = centered_rect(70, 80, frame.area());
+
+    frame.render_widget(Clear, area);
+
+    let block = Block::default()
+        .title(" Sourceful MQTT Explorer - Help ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .style(Style::default().bg(Color::Black));
+
+    frame.render_widget(block.clone(), area);
+    let inner = block.inner(area);
+
+    let help_text = vec![
+        Line::from(vec![
+            Span::styled("Navigation", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  ↑/↓, j/k    ", Style::default().fg(Color::Yellow)),
+            Span::raw("Move up/down"),
+        ]),
+        Line::from(vec![
+            Span::styled("  ←/→, h/l    ", Style::default().fg(Color::Yellow)),
+            Span::raw("Collapse/Expand or move to parent"),
+        ]),
+        Line::from(vec![
+            Span::styled("  Enter       ", Style::default().fg(Color::Yellow)),
+            Span::raw("Toggle expand/collapse"),
+        ]),
+        Line::from(vec![
+            Span::styled("  Tab         ", Style::default().fg(Color::Yellow)),
+            Span::raw("Switch panel (Topics → Messages → Stats)"),
+        ]),
+        Line::from(vec![
+            Span::styled("  1/2/3       ", Style::default().fg(Color::Yellow)),
+            Span::raw("Jump to panel directly"),
+        ]),
+        Line::from(vec![
+            Span::styled("  PgUp/PgDn   ", Style::default().fg(Color::Yellow)),
+            Span::raw("Page up/down"),
+        ]),
+        Line::from(vec![
+            Span::styled("  g/G         ", Style::default().fg(Color::Yellow)),
+            Span::raw("Go to top/bottom"),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("Search & Filter", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  /           ", Style::default().fg(Color::Yellow)),
+            Span::raw("Open search"),
+        ]),
+        Line::from(vec![
+            Span::styled("  Esc         ", Style::default().fg(Color::Yellow)),
+            Span::raw("Cancel search / Close help"),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("Display", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  p           ", Style::default().fg(Color::Yellow)),
+            Span::raw("Cycle payload mode (Auto → Raw → Hex → JSON)"),
+        ]),
+        Line::from(vec![
+            Span::styled("  c           ", Style::default().fg(Color::Yellow)),
+            Span::raw("Clear statistics"),
+        ]),
+        Line::from(vec![
+            Span::styled("  ?           ", Style::default().fg(Color::Yellow)),
+            Span::raw("Toggle this help"),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("General", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  q, Ctrl+C   ", Style::default().fg(Color::Yellow)),
+            Span::raw("Quit"),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("Color Legend", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  ■ Wallets   ", Style::default().fg(Color::LightRed)),
+            Span::styled("  ■ Sites     ", Style::default().fg(Color::Cyan)),
+            Span::styled("  ■ Devices   ", Style::default().fg(Color::Green)),
+        ]),
+        Line::from(vec![
+            Span::styled("  ■ Telemetry ", Style::default().fg(Color::Magenta)),
+            Span::styled("  ■ EMS       ", Style::default().fg(Color::Blue)),
+            Span::styled("  ■ IDs/UUIDs ", Style::default().fg(Color::Gray)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("Sourceful Data Model", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::raw("  Hierarchy: "),
+            Span::styled("Wallet", Style::default().fg(Color::LightRed)),
+            Span::raw(" → "),
+            Span::styled("Site", Style::default().fg(Color::Cyan)),
+            Span::raw(" → "),
+            Span::styled("Device", Style::default().fg(Color::Green)),
+            Span::raw(" → "),
+            Span::styled("DER", Style::default().fg(Color::Yellow)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  telemetry/{device_id}/meter/{type}/json", Style::default().fg(Color::DarkGray)),
+        ]),
+        Line::from(vec![
+            Span::styled("  sites/{site_id}/...", Style::default().fg(Color::DarkGray)),
+        ]),
+    ];
+
+    let paragraph = Paragraph::new(help_text);
+    frame.render_widget(paragraph, inner);
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(area);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
+}
