@@ -1,38 +1,72 @@
-# Sourceful MQTT Explorer Configuration
+# Sourceful Energy DataFeeder Configuration
+# Copy this file to config.toml and edit with your settings
 
 [mqtt]
-# VerneMQ broker host
+# ============================================================================
+# MQTT Broker Connection
+# ============================================================================
+
+# Broker hostname
 host = "mqtt.sourceful.energy"
+
+# Broker port (typically 1883 for plain, 8883 for TLS)
 port = 8883
+
+# Enable TLS/SSL encryption
 use_tls = true
 
-# Client ID for MQTT connection
+# ============================================================================
+# Authentication
+# ============================================================================
+
+# Client ID - unique identifier for this connection
+# Also used as username if username is not explicitly set
 client_id = "datafeeder-explorer"
 
-# Username for MQTT auth (defaults to client_id if not set)
+# Username for MQTT authentication
+# If not set, defaults to client_id
 # username = "your-username"
 
-# Token goes in password field
+# Authentication token (password field)
 # Can also be set via MQTT_TOKEN environment variable
+# Environment variable takes precedence if both are set
 token = "your-jwt-token-here"
 
-# Topic to subscribe to (default: # for all topics)
+# ============================================================================
+# Subscription
+# ============================================================================
+
+# Topic pattern to subscribe to
+# Supports MQTT wildcards:
+#   # = multi-level wildcard (matches any number of levels)
+#   + = single-level wildcard (matches exactly one level)
+#
 # Examples:
-#   "#" - All topics
-#   "telemetry/#" - All telemetry
-#   "sites/#" - All site data
-#   "telemetry/+/meter/#" - All meter telemetry
+#   "#"                    - All topics (default)
+#   "telemetry/#"          - All telemetry data
+#   "telemetry/+/meter/#"  - All meter data from any device
+#   "sites/+/devices/#"    - All device data under any site
+#   "ems/#"                - All EMS (Energy Management System) data
 subscribe_topic = "#"
 
 # Keep-alive interval in seconds
+# Broker will disconnect if no packets received within 1.5x this interval
 keep_alive_secs = 30
 
 [ui]
-# Messages to buffer per topic
+# ============================================================================
+# User Interface Settings
+# ============================================================================
+
+# Number of messages to buffer per topic
+# Higher values use more memory but allow scrolling through history
 message_buffer_size = 100
 
-# Window for rate calculations (seconds)
+# Time window for rate calculations (messages/sec, bytes/sec)
+# Shorter windows are more responsive, longer windows are smoother
 stats_window_secs = 10
 
-# UI refresh rate (milliseconds)
+# UI refresh rate in milliseconds
+# Lower values = smoother updates but higher CPU usage
+# Recommended: 50-200ms
 tick_rate_ms = 100
