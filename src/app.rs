@@ -5,7 +5,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use crate::config::Config;
 use crate::mqtt::{ConnectionState, MqttEvent, MqttMessage};
 use crate::persistence::UserData;
-use crate::state::{get_numeric_fields, DeviceTracker, MessageBuffer, MetricTracker, Stats, TopicInfo, TopicTree};
+use crate::state::{get_numeric_fields, ChangeType, DeviceTracker, LatencyTracker, MessageBuffer, MetricTracker, SchemaTracker, Stats, TopicInfo, TopicTree};
 use crate::state::metric_tracker::topic_matches;
 
 /// Current UI panel focus
@@ -84,6 +84,10 @@ pub struct App {
     pub metric_tracker: MetricTracker,
     /// Device health tracker
     pub device_tracker: DeviceTracker,
+    /// Latency tracker
+    pub latency_tracker: LatencyTracker,
+    /// Schema change tracker
+    pub schema_tracker: SchemaTracker,
     /// Available numeric fields for metric selection
     pub available_fields: Vec<(String, f64)>,
     /// Selected field index in metric selection mode
@@ -134,6 +138,8 @@ impl App {
             status_message: None,
             metric_tracker: MetricTracker::new(100), // Keep last 100 data points
             device_tracker: DeviceTracker::new(),
+            latency_tracker: LatencyTracker::new(100),
+            schema_tracker: SchemaTracker::new(),
             available_fields: Vec::new(),
             metric_select_index: 0,
             topic_filter: None,
@@ -205,6 +211,19 @@ impl App {
                 self.metric_tracker.process_message(&msg.topic, &msg.payload);
                 // Process for device health tracking
                 self.device_tracker.process_message(&msg.topic, msg.payload_size());
+                // Process for latency tracking
+                self.latency_tracker.record_message(&msg.payload);
+                // Process for schema change detection
+                let schema_changes = self.schema_tracker.process_message(&msg.topic, &msg.payload);
+                if !schema_changes.is_empty() {
+                    let change = &schema_changes[0];
+                    let msg = match change.change_type {
+                        ChangeType::FieldAdded => format!("Schema +{}", change.field_path),
+                        ChangeType::FieldRemoved => format!("Schema -{}", change.field_path),
+                        ChangeType::TypeChanged => format!("Schema ~{}", change.field_path),
+                    };
+                    self.set_status(&msg);
+                }
                 self.message_buffer.push(msg);
             }
             MqttEvent::StateChange(state) => {

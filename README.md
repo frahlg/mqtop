@@ -33,6 +33,8 @@ A high-performance MQTT explorer and debug tool built in Rust for the Sourceful 
 - **Device health monitoring** - Auto-tracks devices from telemetry topics
 - **Metric tracking with sparklines** - Track numeric fields over time with live graphs
 - **MQTT wildcard filters** - Filter topics using `+` and `#` patterns
+- **Latency monitoring** - Track message delays and jitter
+- **Schema change detection** - Alerts when JSON payload structure changes
 - **Starred topics** - Bookmark important topics with persistence
 - **Clipboard support** - Copy topics and payloads
 - **JSON syntax highlighting** - Pretty-printed payload inspection
@@ -206,6 +208,8 @@ Real-time statistics including:
 - Connection status
 - Message count and rate
 - Data throughput
+- **Latency metrics** - Message delays, inter-arrival times, jitter
+- **Schema changes** - Alerts when JSON structure changes (+field, -field, ~type)
 - Topic counts by category
 - Device health summary
 - Tracked metrics with sparklines

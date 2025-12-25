@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::app::{App, Panel};
-use crate::state::{render_sparkline, HealthStatus, Stats};
+use crate::state::{render_sparkline, ChangeType, HealthStatus, LatencyTracker, Stats};
 use super::bordered_block;
 
 pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
@@ -117,6 +117,112 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(Color::DarkGray),
         ),
     ]));
+
+    // Latency info
+    if app.latency_tracker.inter_arrival_count > 0 {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("Latency", Style::default().add_modifier(Modifier::BOLD)),
+        ]));
+
+        // Inter-arrival time (time between messages)
+        if let Some(avg) = app.latency_tracker.avg_inter_arrival() {
+            lines.push(Line::from(vec![
+                Span::raw("  Interval: "),
+                Span::styled(
+                    LatencyTracker::format_duration(avg),
+                    Style::default().fg(Color::Cyan),
+                ),
+                Span::styled(" avg", Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+
+        // Payload latency (if timestamps available)
+        if let Some(avg) = app.latency_tracker.avg_payload_latency() {
+            let color = if app.latency_tracker.has_high_latency() {
+                Color::Red
+            } else if avg.as_millis() > 1000 {
+                Color::Yellow
+            } else {
+                Color::Green
+            };
+
+            lines.push(Line::from(vec![
+                Span::raw("  Msg Delay: "),
+                Span::styled(
+                    LatencyTracker::format_duration(avg),
+                    Style::default().fg(color),
+                ),
+                Span::styled(" avg", Style::default().fg(Color::DarkGray)),
+            ]));
+
+            if let Some(max) = app.latency_tracker.max_payload_latency {
+                lines.push(Line::from(vec![
+                    Span::styled("  max: ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        LatencyTracker::format_duration(max),
+                        Style::default().fg(if max.as_secs() > 5 { Color::Red } else { Color::White }),
+                    ),
+                ]));
+            }
+        }
+
+        // Jitter
+        if let Some(jitter) = app.latency_tracker.jitter() {
+            lines.push(Line::from(vec![
+                Span::raw("  Jitter: "),
+                Span::styled(
+                    LatencyTracker::format_duration(jitter),
+                    Style::default().fg(if jitter.as_millis() > 500 { Color::Yellow } else { Color::White }),
+                ),
+            ]));
+        }
+    }
+
+    // Schema changes (show if any recent changes)
+    let recent_changes = app.schema_tracker.recent_changes();
+    if !recent_changes.is_empty() {
+        // Only show changes from last 60 seconds
+        let recent: Vec<_> = recent_changes
+            .iter()
+            .filter(|c| c.timestamp.elapsed().as_secs() < 60)
+            .collect();
+
+        if !recent.is_empty() {
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled("Schema Changes", Style::default().add_modifier(Modifier::BOLD).fg(Color::Yellow)),
+            ]));
+
+            for change in recent.iter().take(3) {
+                let (symbol, color) = match change.change_type {
+                    ChangeType::FieldAdded => ("+", Color::Green),
+                    ChangeType::FieldRemoved => ("-", Color::Red),
+                    ChangeType::TypeChanged => ("~", Color::Yellow),
+                };
+
+                let field_display = if change.field_path.len() > 15 {
+                    format!("{}...", &change.field_path[..12])
+                } else {
+                    change.field_path.clone()
+                };
+
+                lines.push(Line::from(vec![
+                    Span::styled(format!("  {} ", symbol), Style::default().fg(color)),
+                    Span::styled(field_display, Style::default().fg(Color::White)),
+                ]));
+            }
+
+            if recent.len() > 3 {
+                lines.push(Line::from(vec![
+                    Span::styled(
+                        format!("  +{} more", recent.len() - 3),
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                ]));
+            }
+        }
+    }
 
     // Sourceful entity counts (if we tracked them)
     lines.push(Line::from(""));
