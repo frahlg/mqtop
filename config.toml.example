@@ -1,4 +1,4 @@
-# Sourceful Energy DataFeeder Configuration
+# mqtop Configuration
 # Copy this file to config.toml and edit with your settings
 
 [mqtt]
@@ -7,7 +7,7 @@
 # ============================================================================
 
 # Broker hostname
-host = "mqtt.sourceful.energy"
+host = "mqtt.example.com"
 
 # Broker port (typically 1883 for plain, 8883 for TLS)
 port = 8883
@@ -21,7 +21,7 @@ use_tls = true
 
 # Client ID - unique identifier for this connection
 # Also used as username if username is not explicitly set
-client_id = "datafeeder-explorer"
+client_id = "mqtop-explorer"
 
 # Username for MQTT authentication
 # If not set, defaults to client_id
@@ -42,11 +42,10 @@ token = "your-jwt-token-here"
 #   + = single-level wildcard (matches exactly one level)
 #
 # Examples:
-#   "#"                    - All topics (default)
-#   "telemetry/#"          - All telemetry data
-#   "telemetry/+/meter/#"  - All meter data from any device
-#   "sites/+/devices/#"    - All device data under any site
-#   "ems/#"                - All EMS (Energy Management System) data
+#   "#"                      - All topics (default)
+#   "sensors/#"              - All sensor data
+#   "sensors/+/temperature"  - Temperature from any device
+#   "building/+/floor/#"     - All data from any floor
 subscribe_topic = "#"
 
 # Keep-alive interval in seconds
@@ -70,3 +69,50 @@ stats_window_secs = 10
 # Lower values = smoother updates but higher CPU usage
 # Recommended: 50-200ms
 tick_rate_ms = 100
+
+# ============================================================================
+# Topic Colors (Optional)
+# ============================================================================
+# Customize topic highlighting in the tree view.
+# Topics matching a pattern will be displayed in the specified color.
+# Patterns are case-insensitive and match segment names or path prefixes.
+#
+# Available colors:
+#   red, green, blue, yellow, cyan, magenta, white, gray
+#   light_red, light_green, light_blue, light_yellow, light_cyan, light_magenta
+#
+# Examples:
+# [[ui.topic_colors]]
+# pattern = "sensors"
+# color = "cyan"
+#
+# [[ui.topic_colors]]
+# pattern = "alerts"
+# color = "red"
+#
+# [[ui.topic_colors]]
+# pattern = "status"
+# color = "green"
+
+# ============================================================================
+# Topic Categories (Optional)
+# ============================================================================
+# Count topics by category in the Stats panel.
+# Useful for monitoring different parts of your topic hierarchy.
+# Patterns are case-insensitive and match anywhere in the topic path.
+#
+# Examples:
+# [[ui.topic_categories]]
+# label = "Sensors"
+# pattern = "sensors"
+# color = "cyan"
+#
+# [[ui.topic_categories]]
+# label = "Alerts"
+# pattern = "alerts"
+# color = "red"
+#
+# [[ui.topic_categories]]
+# label = "Devices"
+# pattern = "devices"
+# color = "green"

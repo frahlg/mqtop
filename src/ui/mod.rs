@@ -82,7 +82,7 @@ fn render_header(frame: &mut Frame, app: &App, area: Rect) {
     let color = app.connection_color();
 
     let header = Line::from(vec![
-        Span::styled(" Sourceful DataFeeder ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(" mqtop ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
         Span::raw("│ "),
         Span::styled(format!("● {}", status), Style::default().fg(color)),
         Span::raw(" │ "),

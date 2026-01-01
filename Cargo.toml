@@ -1,9 +1,9 @@
 [package]
-name = "datafeeder"
+name = "mqtop"
 version = "0.1.0"
 edition = "2021"
-description = "High-performance MQTT explorer and ingestion server"
-authors = ["DataFeeder Team"]
+description = "High-performance MQTT explorer TUI - like htop for your broker"
+authors = ["Sourceful Energy"]
 
 [dependencies]
 # MQTT client

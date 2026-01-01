@@ -9,6 +9,84 @@ pub struct Config {
     pub ui: UiConfig,
 }
 
+/// Parse color string to ratatui Color
+pub fn parse_color(color: &str) -> ratatui::style::Color {
+    use ratatui::style::Color;
+    match color.to_lowercase().as_str() {
+        "red" => Color::Red,
+        "green" => Color::Green,
+        "blue" => Color::Blue,
+        "yellow" => Color::Yellow,
+        "cyan" => Color::Cyan,
+        "magenta" => Color::Magenta,
+        "white" => Color::White,
+        "gray" | "grey" => Color::Gray,
+        "light_red" | "lightred" => Color::LightRed,
+        "light_green" | "lightgreen" => Color::LightGreen,
+        "light_blue" | "lightblue" => Color::LightBlue,
+        "light_yellow" | "lightyellow" => Color::LightYellow,
+        "light_cyan" | "lightcyan" => Color::LightCyan,
+        "light_magenta" | "lightmagenta" => Color::LightMagenta,
+        _ => Color::White,
+    }
+}
+
+/// Topic color rule for highlighting topics in the tree view
+#[derive(Debug, Clone, Deserialize)]
+pub struct TopicColorRule {
+    /// Pattern to match (case-insensitive, matches segment or path)
+    pub pattern: String,
+    /// Color name: red, green, blue, yellow, cyan, magenta, white, gray,
+    /// light_red, light_green, light_blue, light_yellow, light_cyan, light_magenta
+    pub color: String,
+}
+
+impl TopicColorRule {
+    /// Check if this rule matches a topic segment or path
+    pub fn matches(&self, segment: &str, full_path: &str) -> bool {
+        let pattern = self.pattern.to_lowercase();
+        let segment_lower = segment.to_lowercase();
+        let path_lower = full_path.to_lowercase();
+
+        segment_lower == pattern
+            || path_lower.starts_with(&pattern)
+            || path_lower.contains(&format!("/{}/", pattern))
+    }
+
+    /// Parse color string to ratatui Color
+    pub fn to_color(&self) -> ratatui::style::Color {
+        parse_color(&self.color)
+    }
+}
+
+/// Topic category for counting in stats panel
+#[derive(Debug, Clone, Deserialize)]
+pub struct TopicCategory {
+    /// Display label in stats panel
+    pub label: String,
+    /// Pattern to match (case-insensitive)
+    pub pattern: String,
+    /// Color for the count display
+    pub color: String,
+}
+
+impl TopicCategory {
+    /// Check if a topic path matches this category
+    pub fn matches(&self, full_path: &str) -> bool {
+        let pattern = self.pattern.to_lowercase();
+        let path_lower = full_path.to_lowercase();
+
+        path_lower.starts_with(&pattern)
+            || path_lower.contains(&format!("/{}/", pattern))
+            || path_lower.contains(&pattern)
+    }
+
+    /// Parse color string to ratatui Color
+    pub fn to_color(&self) -> ratatui::style::Color {
+        parse_color(&self.color)
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct MqttConfig {
     pub host: String,
@@ -36,6 +114,12 @@ pub struct UiConfig {
     pub stats_window_secs: u64,
     #[serde(default = "default_tick_rate")]
     pub tick_rate_ms: u64,
+    /// Custom topic color rules for highlighting in tree view
+    #[serde(default)]
+    pub topic_colors: Vec<TopicColorRule>,
+    /// Topic categories for counting in stats panel
+    #[serde(default)]
+    pub topic_categories: Vec<TopicCategory>,
 }
 
 impl Default for UiConfig {
@@ -44,6 +128,8 @@ impl Default for UiConfig {
             message_buffer_size: default_message_buffer_size(),
             stats_window_secs: default_stats_window(),
             tick_rate_ms: default_tick_rate(),
+            topic_colors: Vec::new(),
+            topic_categories: Vec::new(),
         }
     }
 }

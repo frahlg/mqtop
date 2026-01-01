@@ -7,6 +7,7 @@ use ratatui::{
 };
 
 use crate::app::{App, FilterMode, Panel};
+use crate::config::TopicColorRule;
 use crate::state::TopicInfo;
 use super::bordered_block;
 
@@ -35,13 +36,14 @@ pub fn render_tree(frame: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
+    let color_rules = &app.config.ui.topic_colors;
     let items: Vec<ListItem> = topics
         .iter()
         .enumerate()
         .map(|(i, topic)| {
             let is_selected = i == app.selected_topic_index;
             let is_starred = app.is_starred(&topic.full_path);
-            create_topic_item(topic, is_selected, focused, is_starred)
+            create_topic_item(topic, is_selected, focused, is_starred, color_rules)
         })
         .collect();
 
@@ -58,7 +60,13 @@ pub fn render_tree(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_stateful_widget(list, inner, &mut state);
 }
 
-fn create_topic_item(topic: &TopicInfo, is_selected: bool, focused: bool, is_starred: bool) -> ListItem<'static> {
+fn create_topic_item(
+    topic: &TopicInfo,
+    is_selected: bool,
+    focused: bool,
+    is_starred: bool,
+    color_rules: &[TopicColorRule],
+) -> ListItem<'static> {
     let indent = "  ".repeat(topic.depth);
 
     // Star indicator
@@ -71,8 +79,8 @@ fn create_topic_item(topic: &TopicInfo, is_selected: bool, focused: bool, is_sta
         "  "
     };
 
-    // Color code by topic segment for Sourceful entities
-    let segment_color = get_topic_color(&topic.segment, &topic.full_path);
+    // Color code by topic segment using config rules
+    let segment_color = get_topic_color(&topic.segment, &topic.full_path, color_rules);
 
     // Format message count
     let count_str = if topic.message_count > 0 {
@@ -98,30 +106,18 @@ fn create_topic_item(topic: &TopicInfo, is_selected: bool, focused: bool, is_sta
     ListItem::new(line)
 }
 
-/// Get color based on topic segment for Sourceful-specific highlighting
-fn get_topic_color(segment: &str, full_path: &str) -> Color {
-    // Sourceful entity colors (Wallet → Site → Device → DER hierarchy)
-    let segment_lower = segment.to_lowercase();
-    let path_lower = full_path.to_lowercase();
+/// Get color based on topic segment using configurable rules
+fn get_topic_color(segment: &str, full_path: &str, color_rules: &[TopicColorRule]) -> Color {
+    // Check config-based color rules first
+    for rule in color_rules {
+        if rule.matches(segment, full_path) {
+            return rule.to_color();
+        }
+    }
 
-    if segment_lower == "wallets" || path_lower.starts_with("wallets") || path_lower.contains("/wallets/") {
-        Color::LightRed  // Wallets at top of hierarchy
-    } else if segment_lower == "sites" || path_lower.starts_with("sites") || path_lower.contains("/sites/") {
-        Color::Cyan
-    } else if segment_lower == "devices" || path_lower.contains("/devices/") {
-        Color::Green
-    } else if segment_lower == "ders" || path_lower.contains("/ders/") {
-        Color::Yellow
-    } else if segment_lower == "telemetry" || path_lower.starts_with("telemetry") {
-        Color::Magenta
-    } else if segment_lower == "ems" || path_lower.starts_with("ems") {
-        Color::Blue
-    } else if segment_lower == "optimizer" || path_lower.contains("optimizer") {
-        Color::LightBlue
-    } else if segment_lower == "meta" || segment_lower == "metadata" {
-        Color::LightCyan
-    } else if is_uuid_like(segment) {
-        Color::Gray  // UUIDs/IDs in gray
+    // Fallback: UUIDs/IDs in gray, everything else white
+    if is_uuid_like(segment) {
+        Color::Gray
     } else {
         Color::White
     }

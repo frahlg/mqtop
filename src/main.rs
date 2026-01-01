@@ -26,10 +26,10 @@ use config::Config;
 use mqtt::{MqttClient, MqttEvent};
 
 #[derive(Parser, Debug)]
-#[command(name = "datafeeder")]
+#[command(name = "mqtop")]
 #[command(author = "Sourceful Energy")]
 #[command(version = "0.1.0")]
-#[command(about = "Sourceful Energy DataFeeder - High-performance MQTT Explorer & Debug Tool", long_about = None)]
+#[command(about = "mqtop - High-performance MQTT explorer TUI by Sourceful Energy", long_about = None)]
 struct Args {
     /// Path to configuration file
     #[arg(short, long, default_value = "config.toml")]
@@ -76,7 +76,7 @@ async fn main() -> Result<()> {
                 std::fs::OpenOptions::new()
                     .create(true)
                     .append(true)
-                    .open("datafeeder.log")
+                    .open("mqtop.log")
                     .expect("Failed to open log file")
             })
             .finish();
@@ -95,7 +95,7 @@ async fn main() -> Result<()> {
 
         // Check for minimum required args
         if args.host.is_none() || args.client_id.is_none() {
-            eprintln!("\nUsage: datafeeder --host <mqtt-host> --client-id <client-id>");
+            eprintln!("\nUsage: mqtop --host <mqtt-host> --client-id <client-id>");
             eprintln!("\nOr create a config.toml:");
             eprintln!("\n[mqtt]");
             eprintln!("host = \"your-mqtt-broker.com\"");
@@ -142,7 +142,7 @@ async fn main() -> Result<()> {
         config.mqtt.use_tls = true;
     }
 
-    info!("Starting Sourceful MQTT Explorer");
+    info!("Starting mqtop");
     info!("Connecting to {}:{}", config.mqtt.host, config.mqtt.port);
 
     // Run the TUI application
@@ -206,6 +206,6 @@ async fn run_app(config: Config) -> Result<()> {
     )?;
     terminal.show_cursor()?;
 
-    info!("Sourceful MQTT Explorer exiting");
+    info!("mqtop exiting");
     Ok(())
 }

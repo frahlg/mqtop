@@ -12,7 +12,7 @@ pub fn render_help(frame: &mut Frame) {
     frame.render_widget(Clear, area);
 
     let block = Block::default()
-        .title(" Sourceful MQTT Explorer - Help ")
+        .title(" mqtop - Help ")
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan))
         .style(Style::default().bg(Color::Black));
@@ -122,40 +122,17 @@ pub fn render_help(frame: &mut Frame) {
         ]),
         Line::from(""),
         Line::from(vec![
-            Span::styled("Color Legend", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled("Topic Colors", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
         ]),
         Line::from(""),
         Line::from(vec![
-            Span::styled("  ■ Wallets   ", Style::default().fg(Color::LightRed)),
-            Span::styled("  ■ Sites     ", Style::default().fg(Color::Cyan)),
-            Span::styled("  ■ Devices   ", Style::default().fg(Color::Green)),
+            Span::raw("  Topic colors are configurable via "),
+            Span::styled("[[ui.topic_colors]]", Style::default().fg(Color::Yellow)),
         ]),
         Line::from(vec![
-            Span::styled("  ■ Telemetry ", Style::default().fg(Color::Magenta)),
-            Span::styled("  ■ EMS       ", Style::default().fg(Color::Blue)),
-            Span::styled("  ■ IDs/UUIDs ", Style::default().fg(Color::Gray)),
-        ]),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("Sourceful Data Model", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        ]),
-        Line::from(""),
-        Line::from(vec![
-            Span::raw("  Hierarchy: "),
-            Span::styled("Wallet", Style::default().fg(Color::LightRed)),
-            Span::raw(" → "),
-            Span::styled("Site", Style::default().fg(Color::Cyan)),
-            Span::raw(" → "),
-            Span::styled("Device", Style::default().fg(Color::Green)),
-            Span::raw(" → "),
-            Span::styled("DER", Style::default().fg(Color::Yellow)),
-        ]),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("  telemetry/{device_id}/meter/{type}/json", Style::default().fg(Color::DarkGray)),
-        ]),
-        Line::from(vec![
-            Span::styled("  sites/{site_id}/...", Style::default().fg(Color::DarkGray)),
+            Span::raw("  in config.toml. UUIDs/IDs are shown in "),
+            Span::styled("gray", Style::default().fg(Color::Gray)),
+            Span::raw("."),
         ]),
     ];
 

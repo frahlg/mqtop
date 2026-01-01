@@ -218,49 +218,24 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
         }
     }
 
-    // Sourceful entity counts (if we tracked them)
-    lines.push(Line::from(""));
-    lines.push(Line::from(vec![
-        Span::styled("Sourceful", Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan)),
-    ]));
+    // Topic Categories (configurable)
+    let categories = &app.config.ui.topic_categories;
+    if !categories.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("Categories", Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan)),
+        ]));
 
-    // Count topics by prefix
-    let visible = app.get_visible_topics();
-    let wallets = visible.iter().filter(|t| t.full_path.starts_with("wallets")).count();
-    let sites = visible.iter().filter(|t| t.full_path.contains("sites") || t.full_path.starts_with("sites")).count();
-    let devices = visible.iter().filter(|t| t.full_path.contains("devices")).count();
-    let telemetry = visible.iter().filter(|t| t.full_path.starts_with("telemetry")).count();
-    let ems = visible.iter().filter(|t| t.full_path.starts_with("ems")).count();
-
-    if wallets > 0 {
-        lines.push(Line::from(vec![
-            Span::raw("  Wallets: "),
-            Span::styled(wallets.to_string(), Style::default().fg(Color::LightRed)),
-        ]));
-    }
-    if sites > 0 {
-        lines.push(Line::from(vec![
-            Span::raw("  Sites: "),
-            Span::styled(sites.to_string(), Style::default().fg(Color::Cyan)),
-        ]));
-    }
-    if devices > 0 {
-        lines.push(Line::from(vec![
-            Span::raw("  Devices: "),
-            Span::styled(devices.to_string(), Style::default().fg(Color::Green)),
-        ]));
-    }
-    if telemetry > 0 {
-        lines.push(Line::from(vec![
-            Span::raw("  Telemetry: "),
-            Span::styled(telemetry.to_string(), Style::default().fg(Color::Magenta)),
-        ]));
-    }
-    if ems > 0 {
-        lines.push(Line::from(vec![
-            Span::raw("  EMS: "),
-            Span::styled(ems.to_string(), Style::default().fg(Color::Blue)),
-        ]));
+        let visible = app.get_visible_topics();
+        for category in categories {
+            let count = visible.iter().filter(|t| category.matches(&t.full_path)).count();
+            if count > 0 {
+                lines.push(Line::from(vec![
+                    Span::raw(format!("  {}: ", category.label)),
+                    Span::styled(count.to_string(), Style::default().fg(category.to_color())),
+                ]));
+            }
+        }
     }
 
     // Device Health section

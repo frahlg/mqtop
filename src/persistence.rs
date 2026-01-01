@@ -36,7 +36,7 @@ impl UserData {
     pub fn default_path() -> PathBuf {
         dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("datafeeder")
+            .join("mqtop")
             .join("userdata.json")
     }
 

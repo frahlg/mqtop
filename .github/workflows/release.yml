@@ -24,32 +24,32 @@ jobs:
           # macOS Apple Silicon
           - os: macos-latest
             target: aarch64-apple-darwin
-            artifact_name: datafeeder
-            asset_name: datafeeder-macos-arm64
+            artifact_name: mqtop
+            asset_name: mqtop-macos-arm64
 
           # macOS Intel
           - os: macos-latest
             target: x86_64-apple-darwin
-            artifact_name: datafeeder
-            asset_name: datafeeder-macos-x64
+            artifact_name: mqtop
+            asset_name: mqtop-macos-x64
 
           # Linux x64
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            artifact_name: datafeeder
-            asset_name: datafeeder-linux-x64
+            artifact_name: mqtop
+            asset_name: mqtop-linux-x64
 
           # Linux ARM64 (for Raspberry Pi, etc.)
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            artifact_name: datafeeder
-            asset_name: datafeeder-linux-arm64
+            artifact_name: mqtop
+            asset_name: mqtop-linux-arm64
 
           # Windows x64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact_name: datafeeder.exe
-            asset_name: datafeeder-windows-x64.exe
+            artifact_name: mqtop.exe
+            asset_name: mqtop-windows-x64.exe
 
     steps:
       - name: Checkout
@@ -96,19 +96,19 @@ jobs:
         run: |
           mkdir -p release
           # macOS ARM64
-          cp artifacts/datafeeder-macos-arm64/datafeeder release/datafeeder-macos-arm64
-          chmod +x release/datafeeder-macos-arm64
+          cp artifacts/mqtop-macos-arm64/mqtop release/mqtop-macos-arm64
+          chmod +x release/mqtop-macos-arm64
           # macOS x64
-          cp artifacts/datafeeder-macos-x64/datafeeder release/datafeeder-macos-x64
-          chmod +x release/datafeeder-macos-x64
+          cp artifacts/mqtop-macos-x64/mqtop release/mqtop-macos-x64
+          chmod +x release/mqtop-macos-x64
           # Linux x64
-          cp artifacts/datafeeder-linux-x64/datafeeder release/datafeeder-linux-x64
-          chmod +x release/datafeeder-linux-x64
+          cp artifacts/mqtop-linux-x64/mqtop release/mqtop-linux-x64
+          chmod +x release/mqtop-linux-x64
           # Linux ARM64
-          cp artifacts/datafeeder-linux-arm64/datafeeder release/datafeeder-linux-arm64
-          chmod +x release/datafeeder-linux-arm64
+          cp artifacts/mqtop-linux-arm64/mqtop release/mqtop-linux-arm64
+          chmod +x release/mqtop-linux-arm64
           # Windows
-          cp artifacts/datafeeder-windows-x64.exe/datafeeder.exe release/datafeeder-windows-x64.exe
+          cp artifacts/mqtop-windows-x64.exe/mqtop.exe release/mqtop-windows-x64.exe
 
       - name: Create checksums
         run: |
@@ -119,11 +119,11 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            release/datafeeder-macos-arm64
-            release/datafeeder-macos-x64
-            release/datafeeder-linux-x64
-            release/datafeeder-linux-arm64
-            release/datafeeder-windows-x64.exe
+            release/mqtop-macos-arm64
+            release/mqtop-macos-x64
+            release/mqtop-linux-x64
+            release/mqtop-linux-arm64
+            release/mqtop-windows-x64.exe
             release/checksums.txt
           generate_release_notes: true
         env:
