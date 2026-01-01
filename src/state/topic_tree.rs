@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 
 /// A trie-based data structure for storing MQTT topic hierarchies efficiently.

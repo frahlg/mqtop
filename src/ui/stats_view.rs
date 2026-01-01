@@ -68,7 +68,7 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
 
         for metric in metrics {
             // Metric label and current value
-            let current = metric.latest().map(|v| format_metric_value(v)).unwrap_or_else(|| "---".to_string());
+            let current = metric.latest().map(format_metric_value).unwrap_or_else(|| "---".to_string());
             lines.push(Line::from(vec![
                 Span::styled(format!("  {}: ", metric.label), Style::default().fg(Color::White)),
                 Span::styled(current, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),

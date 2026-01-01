@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(clippy::manual_range_contains)]
+
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 

@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(clippy::unwrap_or_default)]
+
 use std::collections::{HashMap, VecDeque};
 
 use crate::mqtt::MqttMessage;

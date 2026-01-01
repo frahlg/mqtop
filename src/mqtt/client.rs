@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use anyhow::Result;
 use rumqttc::{AsyncClient, Event, MqttOptions, Packet, QoS, Transport};
 use std::sync::Arc;

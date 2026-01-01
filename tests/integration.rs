@@ -1,9 +1,10 @@
-//! Integration tests for datafeeder
+//! Integration tests for mqtop
 //!
 //! Note: These tests require a running MQTT broker for full integration testing.
 //! Unit tests for resilience logic are in the resilience module.
 
-use std::time::Duration;
+#![allow(unused_imports)]
+#![allow(unexpected_cfgs)]
 
 /// Test configuration parsing
 mod config_tests {
