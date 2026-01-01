@@ -28,7 +28,7 @@ use mqtt::{MqttClient, MqttEvent};
 #[derive(Parser, Debug)]
 #[command(name = "mqtop")]
 #[command(author = "Sourceful Energy")]
-#[command(version = "0.1.0")]
+#[command(version)]
 #[command(about = "mqtop - High-performance MQTT explorer TUI by Sourceful Energy", long_about = None)]
 struct Args {
     /// Path to configuration file
