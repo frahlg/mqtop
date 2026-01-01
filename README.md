@@ -297,6 +297,13 @@ cargo run -- --debug
 cargo build --release
 ```
 
+## Author
+
+Created by **Fredrik Ahlgren** ([@frahlg](https://github.com/frahlg) on GitHub, [@frahlg](https://x.com/frahlg) on X)
+CEO of [Sourceful Labs AB](https://sourceful.energy) (Sourceful Energy)
+
+Co-authored with [Claude Code](https://claude.com/claude-code).
+
 ## License
 
 MIT License - Sourceful Energy 2024
