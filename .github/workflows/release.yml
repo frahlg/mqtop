@@ -128,3 +128,87 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-homebrew:
+    name: Update Homebrew Formula
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download checksums
+        run: |
+          curl -sL "https://github.com/srcfl/mqtop/releases/download/v${{ steps.version.outputs.version }}/checksums.txt" -o checksums.txt
+          cat checksums.txt
+
+      - name: Parse checksums
+        id: checksums
+        run: |
+          echo "macos_arm64=$(grep mqtop-macos-arm64 checksums.txt | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "macos_x64=$(grep mqtop-macos-x64 checksums.txt | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "linux_arm64=$(grep mqtop-linux-arm64 checksums.txt | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "linux_x64=$(grep mqtop-linux-x64 checksums.txt | awk '{print $1}')" >> $GITHUB_OUTPUT
+
+      - name: Generate formula
+        run: |
+          cat > mqtop.rb << 'FORMULA'
+          # typed: false
+          # frozen_string_literal: true
+
+          class Mqtop < Formula
+            desc "High-performance MQTT explorer TUI - like htop for your broker"
+            homepage "https://github.com/srcfl/mqtop"
+            version "${{ steps.version.outputs.version }}"
+            license "MIT"
+
+            on_macos do
+              on_arm do
+                url "https://github.com/srcfl/mqtop/releases/download/v#{version}/mqtop-macos-arm64"
+                sha256 "${{ steps.checksums.outputs.macos_arm64 }}"
+              end
+              on_intel do
+                url "https://github.com/srcfl/mqtop/releases/download/v#{version}/mqtop-macos-x64"
+                sha256 "${{ steps.checksums.outputs.macos_x64 }}"
+              end
+            end
+
+            on_linux do
+              on_arm do
+                url "https://github.com/srcfl/mqtop/releases/download/v#{version}/mqtop-linux-arm64"
+                sha256 "${{ steps.checksums.outputs.linux_arm64 }}"
+              end
+              on_intel do
+                url "https://github.com/srcfl/mqtop/releases/download/v#{version}/mqtop-linux-x64"
+                sha256 "${{ steps.checksums.outputs.linux_x64 }}"
+              end
+            end
+
+            def install
+              binary_name = "mqtop"
+              downloaded_file = Dir["mqtop*"].first || binary_name
+              mv downloaded_file, binary_name if downloaded_file != binary_name
+              bin.install binary_name
+            end
+
+            test do
+              assert_match "mqtop", shell_output("#{bin}/mqtop --version 2>&1", 0)
+            end
+          end
+          FORMULA
+          cat mqtop.rb
+
+      - name: Update Homebrew tap
+        uses: dmnemec/copy_file_to_another_repo_action@main
+        env:
+          API_TOKEN_GITHUB: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        with:
+          source_file: 'mqtop.rb'
+          destination_repo: 'srcfl/homebrew-tap'
+          destination_folder: 'Formula'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          user_name: 'github-actions[bot]'
+          commit_message: 'Update mqtop to v${{ steps.version.outputs.version }}'
