@@ -160,9 +160,11 @@ fn default_tick_rate() -> u64 {
 
 impl Config {
     /// Get the default config directory path (~/.config/mqtop/)
+    /// Uses ~/.config explicitly for cross-platform consistency
     pub fn default_dir() -> PathBuf {
-        dirs::config_dir()
+        dirs::home_dir()
             .unwrap_or_else(|| PathBuf::from("."))
+            .join(".config")
             .join("mqtop")
     }
 
