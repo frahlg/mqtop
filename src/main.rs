@@ -31,9 +31,9 @@ use mqtt::{MqttClient, MqttEvent};
 #[command(version)]
 #[command(about = "mqtop - High-performance MQTT explorer TUI by Sourceful Energy", long_about = None)]
 struct Args {
-    /// Path to configuration file
-    #[arg(short, long, default_value = "config.toml")]
-    config: PathBuf,
+    /// Path to configuration file (default: ~/.config/mqtop/config.toml)
+    #[arg(short, long)]
+    config: Option<PathBuf>,
 
     /// MQTT broker host (overrides config)
     #[arg(long)]
@@ -84,19 +84,20 @@ async fn main() -> Result<()> {
             .context("Failed to set tracing subscriber")?;
     }
 
-    // Load config
-    let mut config = if args.config.exists() {
-        Config::load(&args.config)
-            .with_context(|| format!("Failed to load config from {:?}", args.config))?
+    // Find and load config
+    let config_path = Config::find_config_path(args.config.as_deref());
+    let mut config = if config_path.exists() {
+        Config::load(&config_path)
+            .with_context(|| format!("Failed to load config from {:?}", config_path))?
     } else {
         // Create default config if file doesn't exist
-        eprintln!("Config file not found at {:?}, using defaults", args.config);
-        eprintln!("Create a config.toml or provide --host and --client-id");
+        eprintln!("Config file not found at {:?}", config_path);
+        eprintln!("Searched: ./config.toml, ~/.config/mqtop/config.toml");
 
         // Check for minimum required args
         if args.host.is_none() || args.client_id.is_none() {
             eprintln!("\nUsage: mqtop --host <mqtt-host> --client-id <client-id>");
-            eprintln!("\nOr create a config.toml:");
+            eprintln!("\nOr create a config file at ~/.config/mqtop/config.toml:");
             eprintln!("\n[mqtt]");
             eprintln!("host = \"your-mqtt-broker.com\"");
             eprintln!("port = 8883");

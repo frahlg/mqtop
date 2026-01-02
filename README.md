@@ -93,9 +93,19 @@ Binary will be at `target/release/mqtop` (3MB).
 
 ### 1. Create a config file
 
+mqtop looks for configuration in this order:
+1. Path specified with `-c/--config`
+2. `./config.toml` in current directory
+3. `~/.config/mqtop/config.toml` (recommended for global install)
+
 ```bash
-cp config.toml.example config.toml
+# For global config (recommended)
+mkdir -p ~/.config/mqtop
+cp config.toml.example ~/.config/mqtop/config.toml
 # Edit with your MQTT credentials
+
+# Or for project-specific config
+cp config.toml.example config.toml
 ```
 
 ### 2. Or use command-line arguments
@@ -117,7 +127,7 @@ export MQTT_TOKEN="your-jwt-token"
 
 ## Configuration
 
-Create `config.toml` in your working directory:
+Create `config.toml` in `~/.config/mqtop/` or your working directory:
 
 ```toml
 [mqtt]
@@ -166,14 +176,14 @@ color = "red"
 Usage: mqtop [OPTIONS]
 
 Options:
-  -c, --config <FILE>      Config file path [default: config.toml]
+  -c, --config <FILE>      Config file path [default: ~/.config/mqtop/config.toml]
       --host <HOST>        MQTT broker host (overrides config)
       --port <PORT>        MQTT broker port (overrides config)
       --client-id <ID>     Client ID (overrides config)
   -u, --username <USER>    Username (defaults to client_id)
   -t, --topic <TOPIC>      Subscribe topic (overrides config)
       --tls                Enable TLS
-  -d, --debug              Enable debug logging to datafeeder.log
+  -d, --debug              Enable debug logging to mqtop.log
   -h, --help               Print help
   -V, --version            Print version
 ```
@@ -258,9 +268,9 @@ Real-time statistics including:
 
 ## Data Persistence
 
-User preferences are saved to `~/.config/mqtop/userdata.json`:
-- Starred topics
-- Tracked metrics
+mqtop stores data in `~/.config/mqtop/`:
+- `config.toml` - Configuration file (optional, can also use `./config.toml`)
+- `userdata.json` - Starred topics and tracked metrics (auto-saved)
 
 ## Troubleshooting
 

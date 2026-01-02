@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -159,6 +159,40 @@ fn default_tick_rate() -> u64 {
 }
 
 impl Config {
+    /// Get the default config directory path (~/.config/mqtop/)
+    pub fn default_dir() -> PathBuf {
+        dirs::config_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("mqtop")
+    }
+
+    /// Get the default config file path (~/.config/mqtop/config.toml)
+    pub fn default_path() -> PathBuf {
+        Self::default_dir().join("config.toml")
+    }
+
+    /// Find config file using fallback chain:
+    /// 1. If explicit path provided and exists, use it
+    /// 2. If ./config.toml exists in current directory, use it
+    /// 3. Otherwise use ~/.config/mqtop/config.toml
+    pub fn find_config_path(explicit_path: Option<&Path>) -> PathBuf {
+        // 1. Explicit path takes priority
+        if let Some(path) = explicit_path {
+            if path.exists() {
+                return path.to_path_buf();
+            }
+        }
+
+        // 2. Local config.toml in current directory
+        let local_config = PathBuf::from("config.toml");
+        if local_config.exists() {
+            return local_config;
+        }
+
+        // 3. Default to ~/.config/mqtop/config.toml
+        Self::default_path()
+    }
+
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
         let contents = std::fs::read_to_string(path.as_ref())
             .with_context(|| format!("Failed to read config file: {:?}", path.as_ref()))?;
