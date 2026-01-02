@@ -1,10 +1,10 @@
-mod tree_view;
-mod message_view;
-mod stats_view;
-mod search;
-mod help;
-mod metric_select;
 mod filter;
+mod help;
+mod message_view;
+mod metric_select;
+mod search;
+mod stats_view;
+mod tree_view;
 
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -16,13 +16,13 @@ use ratatui::{
 
 use crate::app::{App, InputMode};
 
-pub use tree_view::render_tree;
-pub use message_view::render_messages;
-pub use stats_view::render_stats;
-pub use search::render_search;
-pub use help::render_help;
-pub use metric_select::render_metric_select;
 pub use filter::render_filter;
+pub use help::render_help;
+pub use message_view::render_messages;
+pub use metric_select::render_metric_select;
+pub use search::render_search;
+pub use stats_view::render_stats;
+pub use tree_view::render_tree;
 
 /// Main render function
 pub fn render(frame: &mut Frame, app: &App) {
@@ -32,9 +32,9 @@ pub fn render(frame: &mut Frame, app: &App) {
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),  // Header
-            Constraint::Min(10),    // Content
-            Constraint::Length(1),  // Footer
+            Constraint::Length(1), // Header
+            Constraint::Min(10),   // Content
+            Constraint::Length(1), // Footer
         ])
         .split(size);
 
@@ -45,9 +45,9 @@ pub fn render(frame: &mut Frame, app: &App) {
     let content_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(30),  // Topic tree
-            Constraint::Percentage(45),  // Messages
-            Constraint::Percentage(25),  // Stats
+            Constraint::Percentage(30), // Topic tree
+            Constraint::Percentage(45), // Messages
+            Constraint::Percentage(25), // Stats
         ])
         .split(main_chunks[1]);
 
@@ -82,7 +82,12 @@ fn render_header(frame: &mut Frame, app: &App, area: Rect) {
     let color = app.connection_color();
 
     let header = Line::from(vec![
-        Span::styled(" mqtop ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            " mqtop ",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw("│ "),
         Span::styled(format!("● {}", status), Style::default().fg(color)),
         Span::raw(" │ "),
@@ -102,24 +107,21 @@ fn render_header(frame: &mut Frame, app: &App, area: Rect) {
 
 fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     let mode_hint = match app.input_mode {
-        InputMode::Normal => {
-            "q:Quit /:Search f:Filter s:Star y:Copy m:Track ?:Help"
-        }
-        InputMode::Search => {
-            "Enter:Select  Esc:Cancel  ↑↓:Navigate results"
-        }
-        InputMode::MetricSelect => {
-            "Enter:Track  Esc:Cancel  ↑↓/jk:Navigate"
-        }
-        InputMode::Filter => {
-            "Enter:Apply  Esc:Cancel  (empty to clear)"
-        }
+        InputMode::Normal => "q:Quit /:Search f:Filter s:Star y:Copy m:Track ?:Help",
+        InputMode::Search => "Enter:Select  Esc:Cancel  ↑↓:Navigate results",
+        InputMode::MetricSelect => "Enter:Track  Esc:Cancel  ↑↓/jk:Navigate",
+        InputMode::Filter => "Enter:Apply  Esc:Cancel  (empty to clear)",
     };
 
     // Check for status message first
     if let Some(status) = app.get_status() {
         let footer = Line::from(vec![
-            Span::styled(format!(" {} ", status), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                format!(" {} ", status),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw("│ "),
             Span::styled(mode_hint, Style::default().fg(Color::DarkGray)),
         ]);
@@ -129,7 +131,10 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
 
     let footer = if let Some(ref err) = app.last_error {
         Line::from(vec![
-            Span::styled(" ERROR: ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                " ERROR: ",
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            ),
             Span::styled(truncate_str(err, 50), Style::default().fg(Color::Red)),
             Span::raw(" │ "),
             Span::raw(mode_hint),
@@ -158,7 +163,9 @@ pub fn bordered_block(title: &str, focused: bool) -> Block<'_> {
         .title(Span::styled(
             format!(" {} ", title),
             if focused {
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::White)
             },

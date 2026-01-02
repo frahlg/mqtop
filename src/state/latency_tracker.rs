@@ -71,12 +71,10 @@ impl LatencyTracker {
         // Try to extract timestamp from payload and calculate latency
         if let Some(latency) = self.extract_payload_latency(payload) {
             // Update running stats
-            self.min_payload_latency = Some(
-                self.min_payload_latency.map_or(latency, |m| m.min(latency))
-            );
-            self.max_payload_latency = Some(
-                self.max_payload_latency.map_or(latency, |m| m.max(latency))
-            );
+            self.min_payload_latency =
+                Some(self.min_payload_latency.map_or(latency, |m| m.min(latency)));
+            self.max_payload_latency =
+                Some(self.max_payload_latency.map_or(latency, |m| m.max(latency)));
             self.total_payload_latency += latency;
             self.payload_latency_count += 1;
 
@@ -93,7 +91,8 @@ impl LatencyTracker {
         let json: serde_json::Value = serde_json::from_slice(payload).ok()?;
 
         // Try common timestamp field names
-        let timestamp = json.get("timestamp")
+        let timestamp = json
+            .get("timestamp")
             .or_else(|| json.get("ts"))
             .or_else(|| json.get("time"))
             .or_else(|| json.get("t"))?;
@@ -180,7 +179,8 @@ impl LatencyTracker {
         }
 
         let avg = self.avg_inter_arrival()?;
-        let variance: f64 = self.inter_arrival_times
+        let variance: f64 = self
+            .inter_arrival_times
             .iter()
             .map(|d| {
                 let diff = if *d > avg {
@@ -190,7 +190,8 @@ impl LatencyTracker {
                 };
                 diff * diff
             })
-            .sum::<f64>() / self.inter_arrival_times.len() as f64;
+            .sum::<f64>()
+            / self.inter_arrival_times.len() as f64;
 
         Some(Duration::from_secs_f64(variance.sqrt()))
     }
@@ -239,8 +240,17 @@ mod tests {
 
     #[test]
     fn test_format_duration() {
-        assert_eq!(LatencyTracker::format_duration(Duration::from_millis(50)), "50ms");
-        assert_eq!(LatencyTracker::format_duration(Duration::from_millis(1500)), "1.5s");
-        assert_eq!(LatencyTracker::format_duration(Duration::from_secs(90)), "1.5m");
+        assert_eq!(
+            LatencyTracker::format_duration(Duration::from_millis(50)),
+            "50ms"
+        );
+        assert_eq!(
+            LatencyTracker::format_duration(Duration::from_millis(1500)),
+            "1.5s"
+        );
+        assert_eq!(
+            LatencyTracker::format_duration(Duration::from_secs(90)),
+            "1.5m"
+        );
     }
 }

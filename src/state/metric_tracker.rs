@@ -263,8 +263,14 @@ mod tests {
     fn test_topic_matches() {
         assert!(topic_matches("#", "any/topic/here"));
         assert!(topic_matches("telemetry/#", "telemetry/device/sensor"));
-        assert!(topic_matches("telemetry/+/sensor", "telemetry/device1/sensor"));
-        assert!(!topic_matches("telemetry/+/sensor", "telemetry/device1/other"));
+        assert!(topic_matches(
+            "telemetry/+/sensor",
+            "telemetry/device1/sensor"
+        ));
+        assert!(!topic_matches(
+            "telemetry/+/sensor",
+            "telemetry/device1/other"
+        ));
         assert!(topic_matches("exact/match", "exact/match"));
         assert!(!topic_matches("exact/match", "exact/other"));
     }
@@ -313,7 +319,11 @@ mod tests {
     #[test]
     fn test_metric_tracking() {
         let mut tracker = MetricTracker::new(100);
-        tracker.track("Power".to_string(), "telemetry/#".to_string(), "W".to_string());
+        tracker.track(
+            "Power".to_string(),
+            "telemetry/#".to_string(),
+            "W".to_string(),
+        );
 
         let payload = br#"{"W": 1500, "V": 230}"#;
         tracker.process_message("telemetry/device1/meter", payload);

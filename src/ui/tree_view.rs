@@ -6,10 +6,10 @@ use ratatui::{
     Frame,
 };
 
+use super::bordered_block;
 use crate::app::{App, FilterMode, Panel};
 use crate::config::TopicColorRule;
 use crate::state::TopicInfo;
-use super::bordered_block;
 
 pub fn render_tree(frame: &mut Frame, app: &App, area: Rect) {
     let focused = app.focused_panel == Panel::TopicTree;
@@ -27,12 +27,11 @@ pub fn render_tree(frame: &mut Frame, app: &App, area: Rect) {
     if topics.is_empty() {
         let empty_msg = Line::from(Span::styled(
             "No topics yet...",
-            Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC),
+            Style::default()
+                .fg(Color::DarkGray)
+                .add_modifier(Modifier::ITALIC),
         ));
-        frame.render_widget(
-            List::new(vec![ListItem::new(empty_msg)]),
-            inner,
-        );
+        frame.render_widget(List::new(vec![ListItem::new(empty_msg)]), inner);
         return;
     }
 
@@ -50,12 +49,15 @@ pub fn render_tree(frame: &mut Frame, app: &App, area: Rect) {
     let mut state = ListState::default();
     state.select(Some(app.selected_topic_index));
 
-    let list = List::new(items)
-        .highlight_style(
-            Style::default()
-                .bg(if focused { Color::DarkGray } else { Color::Black })
-                .add_modifier(Modifier::BOLD),
-        );
+    let list = List::new(items).highlight_style(
+        Style::default()
+            .bg(if focused {
+                Color::DarkGray
+            } else {
+                Color::Black
+            })
+            .add_modifier(Modifier::BOLD),
+    );
 
     frame.render_stateful_widget(list, inner, &mut state);
 }
@@ -74,7 +76,11 @@ fn create_topic_item(
 
     // Determine icon based on topic type and state
     let icon = if topic.has_children {
-        if topic.is_expanded { "▼ " } else { "▶ " }
+        if topic.is_expanded {
+            "▼ "
+        } else {
+            "▶ "
+        }
     } else {
         "  "
     };
@@ -90,7 +96,9 @@ fn create_topic_item(
     };
 
     let style = if is_selected && focused {
-        Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(segment_color)
     };
@@ -126,7 +134,8 @@ fn get_topic_color(segment: &str, full_path: &str, color_rules: &[TopicColorRule
 /// Check if a string looks like a UUID or ID
 fn is_uuid_like(s: &str) -> bool {
     // Check for UUID format or long alphanumeric strings
-    s.len() >= 8 && s.chars().all(|c| c.is_alphanumeric() || c == '-')
+    s.len() >= 8
+        && s.chars().all(|c| c.is_alphanumeric() || c == '-')
         && s.chars().filter(|c| c.is_numeric()).count() > 2
 }
 

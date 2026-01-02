@@ -84,10 +84,7 @@ impl MessageBuffer {
 
     /// Get all recent messages across all topics (newest first, limited)
     pub fn get_recent_all(&self, limit: usize) -> Vec<&MqttMessage> {
-        let mut all_messages: Vec<_> = self.buffers
-            .values()
-            .flat_map(|buf| buf.iter())
-            .collect();
+        let mut all_messages: Vec<_> = self.buffers.values().flat_map(|buf| buf.iter()).collect();
 
         // Sort by timestamp descending
         all_messages.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
@@ -101,12 +98,7 @@ mod tests {
     use super::*;
 
     fn make_message(topic: &str, payload: &str) -> MqttMessage {
-        MqttMessage::new(
-            topic.to_string(),
-            payload.as_bytes().to_vec(),
-            0,
-            false,
-        )
+        MqttMessage::new(topic.to_string(), payload.as_bytes().to_vec(), 0, false)
     }
 
     #[test]

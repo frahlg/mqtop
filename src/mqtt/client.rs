@@ -53,11 +53,7 @@ impl MqttClient {
         let health = Arc::new(RwLock::new(ConnectionHealth::new(backoff)));
 
         // Build MQTT options
-        let mut mqttoptions = MqttOptions::new(
-            &config.client_id,
-            &config.host,
-            config.port,
-        );
+        let mut mqttoptions = MqttOptions::new(&config.client_id, &config.host, config.port);
 
         // Set authentication: username (defaults to client_id), password = token
         mqttoptions.set_credentials(config.get_username(), config.get_token());
@@ -104,13 +100,20 @@ impl MqttClient {
                             Event::Incoming(Packet::ConnAck(connack)) => {
                                 info!("Connected to MQTT broker: {:?}", connack);
                                 health_clone.write().await.record_success();
-                                let _ = event_tx_clone.send(MqttEvent::StateChange(ConnectionState::Connected));
+                                let _ = event_tx_clone
+                                    .send(MqttEvent::StateChange(ConnectionState::Connected));
 
                                 // Subscribe after connection is established
                                 info!("Subscribing to: {}", subscribe_topic);
-                                if let Err(e) = client_clone.subscribe(&subscribe_topic, QoS::AtLeastOnce).await {
+                                if let Err(e) = client_clone
+                                    .subscribe(&subscribe_topic, QoS::AtLeastOnce)
+                                    .await
+                                {
                                     error!("Failed to subscribe: {:?}", e);
-                                    let _ = event_tx_clone.send(MqttEvent::Error(format!("Subscribe failed: {:?}", e)));
+                                    let _ = event_tx_clone.send(MqttEvent::Error(format!(
+                                        "Subscribe failed: {:?}",
+                                        e
+                                    )));
                                 }
                             }
                             Event::Incoming(Packet::SubAck(suback)) => {
@@ -134,13 +137,15 @@ impl MqttClient {
                         let mut health = health_clone.write().await;
                         health.record_failure(error_str.clone());
 
-                        let _ = event_tx_clone.send(MqttEvent::StateChange(ConnectionState::Reconnecting));
+                        let _ = event_tx_clone
+                            .send(MqttEvent::StateChange(ConnectionState::Reconnecting));
                         let _ = event_tx_clone.send(MqttEvent::Error(error_str));
 
                         // Check if we should continue reconnecting
                         if !health.should_reconnect() {
                             error!("Max reconnection attempts reached, giving up");
-                            let _ = event_tx_clone.send(MqttEvent::StateChange(ConnectionState::Disconnected));
+                            let _ = event_tx_clone
+                                .send(MqttEvent::StateChange(ConnectionState::Disconnected));
                             break;
                         }
 

@@ -55,7 +55,9 @@ pub fn render_metric_select(frame: &mut Frame, app: &App) {
         .map(|(i, (field, value))| {
             let is_selected = i == app.metric_select_index;
             let style = if is_selected {
-                Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Magenta)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             };
@@ -66,10 +68,7 @@ pub fn render_metric_select(frame: &mut Frame, app: &App) {
                 Span::styled(prefix, style),
                 Span::styled(field.clone(), style),
                 Span::raw(" = "),
-                Span::styled(
-                    format_value(*value),
-                    Style::default().fg(Color::Cyan),
-                ),
+                Span::styled(format_value(*value), Style::default().fg(Color::Cyan)),
             ]);
 
             ListItem::new(line)

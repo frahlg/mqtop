@@ -27,8 +27,8 @@ pub fn render_search(frame: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Search input
-            Constraint::Min(3),     // Results
+            Constraint::Length(3), // Search input
+            Constraint::Min(3),    // Results
         ])
         .split(inner);
 
@@ -40,7 +40,12 @@ pub fn render_search(frame: &mut Frame, app: &App) {
     let input_text = Line::from(vec![
         Span::styled("/ ", Style::default().fg(Color::Cyan)),
         Span::raw(&app.search_query),
-        Span::styled("▌", Style::default().fg(Color::White).add_modifier(Modifier::SLOW_BLINK)),
+        Span::styled(
+            "▌",
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::SLOW_BLINK),
+        ),
     ]);
 
     let input = Paragraph::new(input_text).block(input_block);
@@ -50,7 +55,9 @@ pub fn render_search(frame: &mut Frame, app: &App) {
     if app.search_results.is_empty() && !app.search_query.is_empty() {
         let no_results = Paragraph::new(Span::styled(
             "No matching topics",
-            Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC),
+            Style::default()
+                .fg(Color::DarkGray)
+                .add_modifier(Modifier::ITALIC),
         ))
         .alignment(Alignment::Center);
         frame.render_widget(no_results, chunks[1]);
@@ -62,7 +69,9 @@ pub fn render_search(frame: &mut Frame, app: &App) {
             .map(|(i, topic)| {
                 let is_selected = i == app.search_result_index;
                 let style = if is_selected {
-                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default().fg(Color::White)
                 };
@@ -85,11 +94,9 @@ pub fn render_search(frame: &mut Frame, app: &App) {
         // Show result count
         if app.search_results.len() > 20 {
             let more = format!("... and {} more", app.search_results.len() - 20);
-            let more_text = Paragraph::new(Span::styled(
-                more,
-                Style::default().fg(Color::DarkGray),
-            ))
-            .alignment(Alignment::Right);
+            let more_text =
+                Paragraph::new(Span::styled(more, Style::default().fg(Color::DarkGray)))
+                    .alignment(Alignment::Right);
 
             let count_area = Rect {
                 y: chunks[1].y + chunks[1].height.saturating_sub(1),
@@ -140,7 +147,9 @@ fn highlight_match(text: &str, query: &str) -> Vec<Span<'static>> {
             Span::raw(text[..start].to_string()),
             Span::styled(
                 text[start..end].to_string(),
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::raw(text[end..].to_string()),
         ]

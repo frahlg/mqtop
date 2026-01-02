@@ -32,10 +32,7 @@ stats_window_secs = 30
         // We can't directly test Config::load without the module being compiled
         // This test validates the config file format is valid TOML
         let parsed: toml::Value = toml::from_str(config_content).unwrap();
-        assert_eq!(
-            parsed["mqtt"]["host"].as_str().unwrap(),
-            "test.example.com"
-        );
+        assert_eq!(parsed["mqtt"]["host"].as_str().unwrap(), "test.example.com");
         assert_eq!(parsed["mqtt"]["port"].as_integer().unwrap(), 8883);
         assert!(parsed["mqtt"]["use_tls"].as_bool().unwrap());
     }
@@ -66,7 +63,11 @@ mod message_tests {
     #[test]
     fn test_binary_payload_hex() {
         let payload: Vec<u8> = vec![0xDE, 0xAD, 0xBE, 0xEF];
-        let hex: String = payload.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ");
+        let hex: String = payload
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<Vec<_>>()
+            .join(" ");
         assert_eq!(hex, "de ad be ef");
     }
 }

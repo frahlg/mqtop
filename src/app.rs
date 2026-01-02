@@ -7,8 +7,11 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use crate::config::Config;
 use crate::mqtt::{ConnectionState, MqttEvent, MqttMessage};
 use crate::persistence::UserData;
-use crate::state::{get_numeric_fields, DeviceTracker, LatencyTracker, MessageBuffer, MetricTracker, SchemaTracker, Stats, TopicInfo, TopicTree};
 use crate::state::metric_tracker::topic_matches;
+use crate::state::{
+    get_numeric_fields, DeviceTracker, LatencyTracker, MessageBuffer, MetricTracker, SchemaTracker,
+    Stats, TopicInfo, TopicTree,
+};
 
 /// Current UI panel focus
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,10 +107,10 @@ pub struct App {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PayloadMode {
-    Auto,   // Auto-detect JSON vs raw
-    Raw,    // Raw string
-    Hex,    // Hex dump
-    Json,   // Force JSON pretty-print
+    Auto, // Auto-detect JSON vs raw
+    Raw,  // Raw string
+    Hex,  // Hex dump
+    Json, // Force JSON pretty-print
 }
 
 impl App {
@@ -213,13 +216,17 @@ impl App {
                 self.stats.record_message(msg.payload_size());
                 self.topic_tree.insert(&msg.topic, msg.payload_size());
                 // Process for metric tracking
-                self.metric_tracker.process_message(&msg.topic, &msg.payload);
+                self.metric_tracker
+                    .process_message(&msg.topic, &msg.payload);
                 // Process for device health tracking
-                self.device_tracker.process_message(&msg.topic, msg.payload_size());
+                self.device_tracker
+                    .process_message(&msg.topic, msg.payload_size());
                 // Process for latency tracking
                 self.latency_tracker.record_message(&msg.payload);
                 // Process for schema tracking (silent - no notifications)
-                let _ = self.schema_tracker.process_message(&msg.topic, &msg.payload);
+                let _ = self
+                    .schema_tracker
+                    .process_message(&msg.topic, &msg.payload);
                 self.message_buffer.push(msg);
             }
             MqttEvent::StateChange(state) => {
@@ -257,11 +264,8 @@ impl App {
                         // e.g., telemetry/device123/meter/zap/json -> telemetry/+/meter/+/json
                         let pattern = create_wildcard_pattern(topic);
                         let label = format!("{} ({})", field, short_topic(topic));
-                        self.metric_tracker.track(
-                            label.clone(),
-                            pattern,
-                            field.clone(),
-                        );
+                        self.metric_tracker
+                            .track(label.clone(), pattern, field.clone());
                         self.set_status(&format!("Tracking: {}", field));
                     }
                 }
@@ -276,7 +280,8 @@ impl App {
             }
             KeyCode::Up | KeyCode::Char('k') => {
                 if !self.available_fields.is_empty() {
-                    self.metric_select_index = self.metric_select_index
+                    self.metric_select_index = self
+                        .metric_select_index
                         .checked_sub(1)
                         .unwrap_or(self.available_fields.len() - 1);
                 }
@@ -396,7 +401,8 @@ impl App {
             KeyCode::Enter => {
                 if !self.search_results.is_empty() {
                     // Select the topic and exit search
-                    if let Some(topic) = self.search_results.get(self.search_result_index).cloned() {
+                    if let Some(topic) = self.search_results.get(self.search_result_index).cloned()
+                    {
                         self.selected_topic = Some(topic.clone());
                         // Expand parent topics
                         self.expand_to_topic(&topic);
@@ -422,7 +428,8 @@ impl App {
             }
             KeyCode::Up => {
                 if !self.search_results.is_empty() {
-                    self.search_result_index = self.search_result_index
+                    self.search_result_index = self
+                        .search_result_index
                         .checked_sub(1)
                         .unwrap_or(self.search_results.len() - 1);
                 }
@@ -601,9 +608,7 @@ impl App {
                     self.expanded_topics.remove(&topic.full_path);
                 } else if topic.depth > 0 {
                     // Go to parent
-                    let parent_path = topic.full_path
-                        .rsplit_once('/')
-                        .map(|(p, _)| p.to_string());
+                    let parent_path = topic.full_path.rsplit_once('/').map(|(p, _)| p.to_string());
                     if let Some(parent) = parent_path {
                         // Find parent index
                         for (i, t) in visible.iter().enumerate() {
@@ -770,16 +775,14 @@ impl App {
                     msg.payload_hex()
                 }
             }
-            PayloadMode::Raw => {
-                msg.payload_str()
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| msg.payload_hex())
-            }
+            PayloadMode::Raw => msg
+                .payload_str()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| msg.payload_hex()),
             PayloadMode::Hex => msg.payload_hex(),
-            PayloadMode::Json => {
-                msg.payload_json_pretty()
-                    .unwrap_or_else(|| "<not valid JSON>".to_string())
-            }
+            PayloadMode::Json => msg
+                .payload_json_pretty()
+                .unwrap_or_else(|| "<not valid JSON>".to_string()),
         }
     }
 
@@ -813,13 +816,16 @@ fn create_wildcard_pattern(topic: &str) -> String {
         .split('/')
         .map(|segment| {
             // Replace segments that look like device IDs or UUIDs
-            if segment.len() > 8 && (
-                segment.contains('-') ||  // UUIDs or device IDs like zap-0000d8c467e385a0
+            if segment.len() > 8
+                && (
+                    segment.contains('-') ||  // UUIDs or device IDs like zap-0000d8c467e385a0
                 segment.chars().all(|c| c.is_ascii_hexdigit()) ||  // Hex strings
                 segment.starts_with("zap-") ||
                 segment.starts_with("dev-") ||
-                segment.parse::<u64>().is_ok()  // Numeric IDs
-            ) {
+                segment.parse::<u64>().is_ok()
+                    // Numeric IDs
+                )
+            {
                 "+".to_string()
             } else {
                 segment.to_string()

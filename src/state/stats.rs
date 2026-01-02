@@ -69,10 +69,7 @@ impl Stats {
         let now = Instant::now();
         let cutoff = now.checked_sub(self.window).unwrap_or(now);
 
-        let count = self.message_times
-            .iter()
-            .filter(|&&t| t >= cutoff)
-            .count();
+        let count = self.message_times.iter().filter(|&&t| t >= cutoff).count();
 
         count as f64 / self.window.as_secs_f64()
     }
@@ -86,7 +83,8 @@ impl Stats {
         let now = Instant::now();
         let cutoff = now.checked_sub(self.window).unwrap_or(now);
 
-        let bytes: usize = self.message_times
+        let bytes: usize = self
+            .message_times
             .iter()
             .zip(self.message_sizes.iter())
             .filter(|(&t, _)| t >= cutoff)

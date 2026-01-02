@@ -75,9 +75,8 @@ impl BackoffStrategy {
             0
         };
 
-        let final_delay = Duration::from_millis(
-            delay.as_millis() as u64 + jitter
-        ).min(self.max_delay);
+        let final_delay =
+            Duration::from_millis(delay.as_millis() as u64 + jitter).min(self.max_delay);
 
         Some(final_delay)
     }
@@ -219,8 +218,7 @@ mod tests {
 
     #[test]
     fn test_backoff_max_attempts() {
-        let backoff = BackoffStrategy::new()
-            .with_max_attempts(3);
+        let backoff = BackoffStrategy::new().with_max_attempts(3);
 
         assert!(backoff.should_continue(0));
         assert!(backoff.should_continue(1));
@@ -286,7 +284,7 @@ mod tests {
         let health = ConnectionHealth::new(
             BackoffStrategy::new()
                 .with_base_delay(Duration::from_millis(100))
-                .with_jitter(0.0)
+                .with_jitter(0.0),
         );
 
         // With 0 failures, no delay needed
@@ -309,9 +307,7 @@ mod tests {
 
     #[test]
     fn test_connection_health_should_reconnect_with_limit() {
-        let mut health = ConnectionHealth::new(
-            BackoffStrategy::new().with_max_attempts(2)
-        );
+        let mut health = ConnectionHealth::new(BackoffStrategy::new().with_max_attempts(2));
 
         assert!(health.should_reconnect());
 

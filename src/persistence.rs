@@ -56,8 +56,7 @@ impl UserData {
         let contents = std::fs::read_to_string(&path)
             .with_context(|| format!("Failed to read user data from {:?}", path))?;
 
-        serde_json::from_str(&contents)
-            .with_context(|| "Failed to parse user data")
+        serde_json::from_str(&contents).with_context(|| "Failed to parse user data")
     }
 
     /// Save user data to file
@@ -73,8 +72,8 @@ impl UserData {
                 .with_context(|| format!("Failed to create directory {:?}", parent))?;
         }
 
-        let contents = serde_json::to_string_pretty(self)
-            .with_context(|| "Failed to serialize user data")?;
+        let contents =
+            serde_json::to_string_pretty(self).with_context(|| "Failed to serialize user data")?;
 
         std::fs::write(&path, contents)
             .with_context(|| format!("Failed to write user data to {:?}", path))?;

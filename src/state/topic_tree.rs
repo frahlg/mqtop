@@ -48,10 +48,7 @@ impl TopicTree {
         let mut current = &mut self.root;
 
         for segment in &segments {
-            current = current
-                .children
-                .entry(segment.to_string())
-                .or_default();
+            current = current.children.entry(segment.to_string()).or_default();
         }
 
         if !current.is_topic {
@@ -83,7 +80,10 @@ impl TopicTree {
     }
 
     /// Get flattened list of topics for display (respecting expanded state)
-    pub fn get_visible_topics(&self, expanded: &std::collections::HashSet<String>) -> Vec<TopicInfo> {
+    pub fn get_visible_topics(
+        &self,
+        expanded: &std::collections::HashSet<String>,
+    ) -> Vec<TopicInfo> {
         let mut result = Vec::new();
         self.collect_visible(&self.root, "", 0, expanded, &mut result);
         result
@@ -132,7 +132,12 @@ impl TopicTree {
     /// Get all topics matching a pattern (simple glob with *)
     pub fn search(&self, pattern: &str) -> Vec<String> {
         let mut results = Vec::new();
-        self.search_recursive(&self.root, "", pattern.to_lowercase().as_str(), &mut results);
+        self.search_recursive(
+            &self.root,
+            "",
+            pattern.to_lowercase().as_str(),
+            &mut results,
+        );
         results
     }
 

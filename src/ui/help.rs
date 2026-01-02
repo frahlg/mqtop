@@ -21,9 +21,12 @@ pub fn render_help(frame: &mut Frame) {
     let inner = block.inner(area);
 
     let help_text = vec![
-        Line::from(vec![
-            Span::styled("Navigation", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        ]),
+        Line::from(vec![Span::styled(
+            "Navigation",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )]),
         Line::from(""),
         Line::from(vec![
             Span::styled("  ↑/↓, j/k    ", Style::default().fg(Color::Yellow)),
@@ -54,9 +57,12 @@ pub fn render_help(frame: &mut Frame) {
             Span::raw("Go to top/bottom"),
         ]),
         Line::from(""),
-        Line::from(vec![
-            Span::styled("Search & Filter", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        ]),
+        Line::from(vec![Span::styled(
+            "Search & Filter",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )]),
         Line::from(""),
         Line::from(vec![
             Span::styled("  /           ", Style::default().fg(Color::Yellow)),
@@ -95,9 +101,12 @@ pub fn render_help(frame: &mut Frame) {
             Span::raw("Cancel search / Close help"),
         ]),
         Line::from(""),
-        Line::from(vec![
-            Span::styled("Display", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        ]),
+        Line::from(vec![Span::styled(
+            "Display",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )]),
         Line::from(""),
         Line::from(vec![
             Span::styled("  p           ", Style::default().fg(Color::Yellow)),
@@ -112,18 +121,24 @@ pub fn render_help(frame: &mut Frame) {
             Span::raw("Toggle this help"),
         ]),
         Line::from(""),
-        Line::from(vec![
-            Span::styled("General", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        ]),
+        Line::from(vec![Span::styled(
+            "General",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )]),
         Line::from(""),
         Line::from(vec![
             Span::styled("  q, Ctrl+C   ", Style::default().fg(Color::Yellow)),
             Span::raw("Quit"),
         ]),
         Line::from(""),
-        Line::from(vec![
-            Span::styled("Topic Colors", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        ]),
+        Line::from(vec![Span::styled(
+            "Topic Colors",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )]),
         Line::from(""),
         Line::from(vec![
             Span::raw("  Topic colors are configurable via "),

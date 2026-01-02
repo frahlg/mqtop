@@ -6,9 +6,9 @@ use ratatui::{
     Frame,
 };
 
+use super::bordered_block;
 use crate::app::{App, Panel, PayloadMode};
 use crate::mqtt::MqttMessage;
-use super::bordered_block;
 
 pub fn render_messages(frame: &mut Frame, app: &App, area: Rect) {
     let focused = app.focused_panel == Panel::Messages;
@@ -34,7 +34,9 @@ pub fn render_messages(frame: &mut Frame, app: &App, area: Rect) {
 
         let text = Paragraph::new(Span::styled(
             empty_msg,
-            Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC),
+            Style::default()
+                .fg(Color::DarkGray)
+                .add_modifier(Modifier::ITALIC),
         ));
         frame.render_widget(text, inner);
         return;
@@ -71,12 +73,11 @@ fn render_message_list(frame: &mut Frame, app: &App, messages: &[&MqttMessage], 
     let mut state = ListState::default();
     state.select(Some(app.selected_message_index));
 
-    let list = List::new(items)
-        .highlight_style(
-            Style::default()
-                .bg(Color::DarkGray)
-                .add_modifier(Modifier::BOLD),
-        );
+    let list = List::new(items).highlight_style(
+        Style::default()
+            .bg(Color::DarkGray)
+            .add_modifier(Modifier::BOLD),
+    );
 
     frame.render_stateful_widget(list, area, &mut state);
 }
@@ -93,7 +94,8 @@ fn create_message_item(msg: &MqttMessage, _is_selected: bool) -> ListItem<'stati
     };
 
     // Preview payload (first line, truncated)
-    let preview = msg.payload_str()
+    let preview = msg
+        .payload_str()
         .map(|s| {
             let first_line = s.lines().next().unwrap_or("");
             if first_line.len() > 40 {
@@ -238,10 +240,24 @@ fn syntax_highlight_json(json: &str) -> Text<'static> {
                 c if !in_string && (c.is_numeric() || c == '-' || c == '.') => {
                     buffer.push(c);
                     // Peek ahead to collect full number
-                    while chars.peek().map(|&c| c.is_numeric() || c == '.' || c == 'e' || c == 'E' || c == '-' || c == '+').unwrap_or(false) {
+                    while chars
+                        .peek()
+                        .map(|&c| {
+                            c.is_numeric()
+                                || c == '.'
+                                || c == 'e'
+                                || c == 'E'
+                                || c == '-'
+                                || c == '+'
+                        })
+                        .unwrap_or(false)
+                    {
                         buffer.push(chars.next().unwrap());
                     }
-                    spans.push(Span::styled(buffer.clone(), Style::default().fg(Color::Magenta)));
+                    spans.push(Span::styled(
+                        buffer.clone(),
+                        Style::default().fg(Color::Magenta),
+                    ));
                     buffer.clear();
                 }
                 _ => {
@@ -254,9 +270,15 @@ fn syntax_highlight_json(json: &str) -> Text<'static> {
             // Check for boolean/null
             let trimmed = buffer.trim();
             if trimmed == "true" || trimmed == "false" {
-                spans.push(Span::styled(buffer.clone(), Style::default().fg(Color::Yellow)));
+                spans.push(Span::styled(
+                    buffer.clone(),
+                    Style::default().fg(Color::Yellow),
+                ));
             } else if trimmed == "null" {
-                spans.push(Span::styled(buffer.clone(), Style::default().fg(Color::Red)));
+                spans.push(Span::styled(
+                    buffer.clone(),
+                    Style::default().fg(Color::Red),
+                ));
             } else {
                 spans.push(Span::raw(buffer));
             }

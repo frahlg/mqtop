@@ -46,16 +46,22 @@ pub fn render_filter(frame: &mut Frame, app: &App) {
     let input_display = format!("{}_", app.filter_input);
     let input = Paragraph::new(Line::from(vec![
         Span::styled("> ", Style::default().fg(Color::Yellow)),
-        Span::styled(input_display, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            input_display,
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
     ]));
     frame.render_widget(input, chunks[1]);
 
     // Examples
     let examples = Paragraph::new(vec![
         Line::from(""),
-        Line::from(vec![
-            Span::styled("Examples: ", Style::default().fg(Color::DarkGray)),
-        ]),
+        Line::from(vec![Span::styled(
+            "Examples: ",
+            Style::default().fg(Color::DarkGray),
+        )]),
         Line::from(vec![
             Span::styled("  telemetry/#       ", Style::default().fg(Color::Cyan)),
             Span::styled("All telemetry", Style::default().fg(Color::DarkGray)),

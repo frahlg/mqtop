@@ -199,8 +199,8 @@ impl Config {
         let contents = std::fs::read_to_string(path.as_ref())
             .with_context(|| format!("Failed to read config file: {:?}", path.as_ref()))?;
 
-        let mut config: Config = toml::from_str(&contents)
-            .with_context(|| "Failed to parse config file")?;
+        let mut config: Config =
+            toml::from_str(&contents).with_context(|| "Failed to parse config file")?;
 
         // Override token from environment if not set in config
         if config.mqtt.token.is_none() {

@@ -172,7 +172,11 @@ impl Schema {
         Self { fields }
     }
 
-    fn extract_fields(value: &serde_json::Value, prefix: &str, fields: &mut HashMap<String, FieldType>) {
+    fn extract_fields(
+        value: &serde_json::Value,
+        prefix: &str,
+        fields: &mut HashMap<String, FieldType>,
+    ) {
         match value {
             serde_json::Value::Null => {
                 if !prefix.is_empty() {

@@ -6,9 +6,9 @@ use ratatui::{
     Frame,
 };
 
+use super::bordered_block;
 use crate::app::{App, Panel};
 use crate::state::{render_sparkline, HealthStatus, LatencyTracker, Stats};
-use super::bordered_block;
 
 pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
     let focused = app.focused_panel == Panel::Stats;
@@ -20,9 +20,10 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
     let mut lines = Vec::new();
 
     // Connection info
-    lines.push(Line::from(vec![
-        Span::styled("Connection", Style::default().add_modifier(Modifier::BOLD)),
-    ]));
+    lines.push(Line::from(vec![Span::styled(
+        "Connection",
+        Style::default().add_modifier(Modifier::BOLD),
+    )]));
     lines.push(Line::from(vec![
         Span::raw("  Status: "),
         Span::styled(
@@ -40,9 +41,10 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
     lines.push(Line::from(""));
 
     // Message stats
-    lines.push(Line::from(vec![
-        Span::styled("Messages", Style::default().add_modifier(Modifier::BOLD)),
-    ]));
+    lines.push(Line::from(vec![Span::styled(
+        "Messages",
+        Style::default().add_modifier(Modifier::BOLD),
+    )]));
     lines.push(Line::from(vec![
         Span::raw("  Total: "),
         Span::styled(
@@ -62,16 +64,30 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
     // Tracked Metrics section - placed high so it's always visible
     let metrics = app.metric_tracker.get_metrics();
     if !metrics.is_empty() {
-        lines.push(Line::from(vec![
-            Span::styled("Tracked Metrics", Style::default().add_modifier(Modifier::BOLD).fg(Color::Magenta)),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            "Tracked Metrics",
+            Style::default()
+                .add_modifier(Modifier::BOLD)
+                .fg(Color::Magenta),
+        )]));
 
         for metric in metrics {
             // Metric label and current value
-            let current = metric.latest().map(format_metric_value).unwrap_or_else(|| "---".to_string());
+            let current = metric
+                .latest()
+                .map(format_metric_value)
+                .unwrap_or_else(|| "---".to_string());
             lines.push(Line::from(vec![
-                Span::styled(format!("  {}: ", metric.label), Style::default().fg(Color::White)),
-                Span::styled(current, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    format!("  {}: ", metric.label),
+                    Style::default().fg(Color::White),
+                ),
+                Span::styled(
+                    current,
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
             ]));
 
             // Sparkline
@@ -87,11 +103,20 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
             if metric.count > 0 {
                 lines.push(Line::from(vec![
                     Span::styled("  min:", Style::default().fg(Color::DarkGray)),
-                    Span::styled(format_metric_value(metric.min), Style::default().fg(Color::Blue)),
+                    Span::styled(
+                        format_metric_value(metric.min),
+                        Style::default().fg(Color::Blue),
+                    ),
                     Span::styled(" max:", Style::default().fg(Color::DarkGray)),
-                    Span::styled(format_metric_value(metric.max), Style::default().fg(Color::Red)),
+                    Span::styled(
+                        format_metric_value(metric.max),
+                        Style::default().fg(Color::Red),
+                    ),
                     Span::styled(" avg:", Style::default().fg(Color::DarkGray)),
-                    Span::styled(format_metric_value(metric.avg()), Style::default().fg(Color::Yellow)),
+                    Span::styled(
+                        format_metric_value(metric.avg()),
+                        Style::default().fg(Color::Yellow),
+                    ),
                 ]));
             }
         }
@@ -99,9 +124,10 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
     }
 
     // Data stats
-    lines.push(Line::from(vec![
-        Span::styled("Data", Style::default().add_modifier(Modifier::BOLD)),
-    ]));
+    lines.push(Line::from(vec![Span::styled(
+        "Data",
+        Style::default().add_modifier(Modifier::BOLD),
+    )]));
     lines.push(Line::from(vec![
         Span::raw("  Total: "),
         Span::styled(
@@ -112,16 +138,20 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
     lines.push(Line::from(vec![
         Span::raw("  Rate: "),
         Span::styled(
-            format!("{}/s", Stats::format_bytes(app.stats.bytes_per_second() as u64)),
+            format!(
+                "{}/s",
+                Stats::format_bytes(app.stats.bytes_per_second() as u64)
+            ),
             Style::default().fg(Color::Green),
         ),
     ]));
     lines.push(Line::from(""));
 
     // Topic stats
-    lines.push(Line::from(vec![
-        Span::styled("Topics", Style::default().add_modifier(Modifier::BOLD)),
-    ]));
+    lines.push(Line::from(vec![Span::styled(
+        "Topics",
+        Style::default().add_modifier(Modifier::BOLD),
+    )]));
     lines.push(Line::from(vec![
         Span::raw("  Unique: "),
         Span::styled(
@@ -139,15 +169,13 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
     lines.push(Line::from(""));
 
     // Session info
-    lines.push(Line::from(vec![
-        Span::styled("Session", Style::default().add_modifier(Modifier::BOLD)),
-    ]));
+    lines.push(Line::from(vec![Span::styled(
+        "Session",
+        Style::default().add_modifier(Modifier::BOLD),
+    )]));
     lines.push(Line::from(vec![
         Span::raw("  Uptime: "),
-        Span::styled(
-            app.stats.uptime_string(),
-            Style::default().fg(Color::White),
-        ),
+        Span::styled(app.stats.uptime_string(), Style::default().fg(Color::White)),
     ]));
     lines.push(Line::from(vec![
         Span::raw("  Client: "),
@@ -160,9 +188,10 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
     // Latency info
     if app.latency_tracker.inter_arrival_count > 0 {
         lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled("Latency", Style::default().add_modifier(Modifier::BOLD)),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            "Latency",
+            Style::default().add_modifier(Modifier::BOLD),
+        )]));
 
         // Inter-arrival time (time between messages)
         if let Some(avg) = app.latency_tracker.avg_inter_arrival() {
@@ -200,7 +229,11 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
                     Span::styled("  max: ", Style::default().fg(Color::DarkGray)),
                     Span::styled(
                         LatencyTracker::format_duration(max),
-                        Style::default().fg(if max.as_secs() > 5 { Color::Red } else { Color::White }),
+                        Style::default().fg(if max.as_secs() > 5 {
+                            Color::Red
+                        } else {
+                            Color::White
+                        }),
                     ),
                 ]));
             }
@@ -212,7 +245,11 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
                 Span::raw("  Jitter: "),
                 Span::styled(
                     LatencyTracker::format_duration(jitter),
-                    Style::default().fg(if jitter.as_millis() > 500 { Color::Yellow } else { Color::White }),
+                    Style::default().fg(if jitter.as_millis() > 500 {
+                        Color::Yellow
+                    } else {
+                        Color::White
+                    }),
                 ),
             ]));
         }
@@ -222,13 +259,19 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
     let categories = &app.config.ui.topic_categories;
     if !categories.is_empty() {
         lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled("Categories", Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan)),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            "Categories",
+            Style::default()
+                .add_modifier(Modifier::BOLD)
+                .fg(Color::Cyan),
+        )]));
 
         let visible = app.get_visible_topics();
         for category in categories {
-            let count = visible.iter().filter(|t| category.matches(&t.full_path)).count();
+            let count = visible
+                .iter()
+                .filter(|t| category.matches(&t.full_path))
+                .count();
             if count > 0 {
                 lines.push(Line::from(vec![
                     Span::raw(format!("  {}: ", category.label)),
@@ -242,33 +285,49 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
     let device_count = app.device_tracker.device_count();
     if device_count > 0 {
         lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled("Device Health", Style::default().add_modifier(Modifier::BOLD).fg(Color::Green)),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            "Device Health",
+            Style::default()
+                .add_modifier(Modifier::BOLD)
+                .fg(Color::Green),
+        )]));
 
         let (healthy, warning, stale, unknown) = app.device_tracker.count_by_status();
         lines.push(Line::from(vec![
             Span::styled("  ● ", Style::default().fg(Color::Green)),
-            Span::styled(format!("{} healthy", healthy), Style::default().fg(Color::White)),
+            Span::styled(
+                format!("{} healthy", healthy),
+                Style::default().fg(Color::White),
+            ),
             Span::raw("  "),
             Span::styled("● ", Style::default().fg(Color::Yellow)),
-            Span::styled(format!("{} warn", warning), Style::default().fg(Color::White)),
+            Span::styled(
+                format!("{} warn", warning),
+                Style::default().fg(Color::White),
+            ),
         ]));
         lines.push(Line::from(vec![
             Span::styled("  ● ", Style::default().fg(Color::Red)),
-            Span::styled(format!("{} stale", stale), Style::default().fg(Color::White)),
+            Span::styled(
+                format!("{} stale", stale),
+                Style::default().fg(Color::White),
+            ),
             Span::raw("  "),
             Span::styled("● ", Style::default().fg(Color::DarkGray)),
-            Span::styled(format!("{} new", unknown), Style::default().fg(Color::White)),
+            Span::styled(
+                format!("{} new", unknown),
+                Style::default().fg(Color::White),
+            ),
         ]));
 
         // Show top 3 most recent devices
         let devices = app.device_tracker.get_devices();
         if !devices.is_empty() {
             lines.push(Line::from(""));
-            lines.push(Line::from(vec![
-                Span::styled("  Recent:", Style::default().fg(Color::DarkGray)),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                "  Recent:",
+                Style::default().fg(Color::DarkGray),
+            )]));
 
             for device in devices.iter().take(3) {
                 let status_color = match device.status {
@@ -292,24 +351,27 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
                 };
 
                 lines.push(Line::from(vec![
-                    Span::styled(format!("  {} ", status_char), Style::default().fg(status_color)),
+                    Span::styled(
+                        format!("  {} ", status_char),
+                        Style::default().fg(status_color),
+                    ),
                     Span::styled(display_id, Style::default().fg(Color::White)),
                 ]));
-                lines.push(Line::from(vec![
-                    Span::styled(
-                        format!("    {} | {}", device.last_seen_string(), device.message_count),
-                        Style::default().fg(Color::DarkGray),
+                lines.push(Line::from(vec![Span::styled(
+                    format!(
+                        "    {} | {}",
+                        device.last_seen_string(),
+                        device.message_count
                     ),
-                ]));
+                    Style::default().fg(Color::DarkGray),
+                )]));
             }
 
             if devices.len() > 3 {
-                lines.push(Line::from(vec![
-                    Span::styled(
-                        format!("  ... +{} more", devices.len() - 3),
-                        Style::default().fg(Color::DarkGray),
-                    ),
-                ]));
+                lines.push(Line::from(vec![Span::styled(
+                    format!("  ... +{} more", devices.len() - 3),
+                    Style::default().fg(Color::DarkGray),
+                )]));
             }
         }
     }

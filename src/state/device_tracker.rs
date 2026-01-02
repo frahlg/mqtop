@@ -102,8 +102,8 @@ impl DeviceTracker {
         Self {
             devices: HashMap::new(),
             rate_window: Duration::from_secs(60),
-            healthy_threshold: 1.0,  // At least 1 msg/min
-            warning_threshold: 0.1,  // At least 1 msg/10min
+            healthy_threshold: 1.0, // At least 1 msg/min
+            warning_threshold: 0.1, // At least 1 msg/10min
         }
     }
 
@@ -115,9 +115,10 @@ impl DeviceTracker {
             let device_type = extract_device_type(topic);
             let rate_window = self.rate_window;
 
-            let device = self.devices.entry(device_id.clone()).or_insert_with(|| {
-                DeviceHealth::new(device_id.clone())
-            });
+            let device = self
+                .devices
+                .entry(device_id.clone())
+                .or_insert_with(|| DeviceHealth::new(device_id.clone()));
 
             device.message_count += 1;
             device.last_seen = Instant::now();
@@ -135,7 +136,9 @@ impl DeviceTracker {
             }
 
             // Prune old messages from rate window
-            let cutoff = Instant::now().checked_sub(rate_window).unwrap_or(Instant::now());
+            let cutoff = Instant::now()
+                .checked_sub(rate_window)
+                .unwrap_or(Instant::now());
             device.recent_messages.retain(|t| *t > cutoff);
 
             // Update status inline to avoid borrow issues
