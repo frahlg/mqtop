@@ -3,6 +3,7 @@ mod help;
 mod message_view;
 mod metric_select;
 mod search;
+mod server_manager;
 mod stats_view;
 mod tree_view;
 
@@ -14,13 +15,14 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{App, InputMode};
+use crate::app::{App, InputMode, Panel};
 
 pub use filter::render_filter;
 pub use help::render_help;
 pub use message_view::render_messages;
 pub use metric_select::render_metric_select;
 pub use search::render_search;
+pub use server_manager::render_server_manager;
 pub use stats_view::render_stats;
 pub use tree_view::render_tree;
 
@@ -32,34 +34,60 @@ pub fn render(frame: &mut Frame, app: &App) {
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1), // Header
-            Constraint::Min(10),   // Content
-            Constraint::Length(1), // Footer
+            Constraint::Length(1),
+            Constraint::Min(3),
+            Constraint::Length(1),
         ])
         .split(size);
 
-    // Render header
     render_header(frame, app, main_chunks[0]);
 
-    // Create content layout: tree | messages | stats
-    let content_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(30), // Topic tree
-            Constraint::Percentage(45), // Messages
-            Constraint::Percentage(25), // Stats
-        ])
-        .split(main_chunks[1]);
+    let show_three_panels = size.width >= 110 && size.height >= 12;
+    let show_two_panels = size.width >= 80 && size.height >= 10;
 
-    // Render panels
-    render_tree(frame, app, content_chunks[0]);
-    render_messages(frame, app, content_chunks[1]);
-    render_stats(frame, app, content_chunks[2]);
+    if show_three_panels {
+        let content_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(30),
+                Constraint::Percentage(45),
+                Constraint::Percentage(25),
+            ])
+            .split(main_chunks[1]);
 
-    // Render footer
+        render_tree(frame, app, content_chunks[0]);
+        render_messages(frame, app, content_chunks[1]);
+        render_stats(frame, app, content_chunks[2]);
+    } else if show_two_panels {
+        let content_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+            .split(main_chunks[1]);
+
+        match app.focused_panel {
+            Panel::Stats => {
+                render_messages(frame, app, content_chunks[0]);
+                render_stats(frame, app, content_chunks[1]);
+            }
+            Panel::Messages => {
+                render_tree(frame, app, content_chunks[0]);
+                render_messages(frame, app, content_chunks[1]);
+            }
+            Panel::TopicTree => {
+                render_tree(frame, app, content_chunks[0]);
+                render_messages(frame, app, content_chunks[1]);
+            }
+        }
+    } else {
+        match app.focused_panel {
+            Panel::TopicTree => render_tree(frame, app, main_chunks[1]),
+            Panel::Messages => render_messages(frame, app, main_chunks[1]),
+            Panel::Stats => render_stats(frame, app, main_chunks[1]),
+        }
+    }
+
     render_footer(frame, app, main_chunks[2]);
 
-    // Render overlays
     if app.input_mode == InputMode::Search {
         render_search(frame, app);
     }
@@ -72,6 +100,10 @@ pub fn render(frame: &mut Frame, app: &App) {
         render_filter(frame, app);
     }
 
+    if app.input_mode == InputMode::ServerManager {
+        render_server_manager(frame, app);
+    }
+
     if app.show_help {
         render_help(frame);
     }
@@ -81,7 +113,7 @@ fn render_header(frame: &mut Frame, app: &App, area: Rect) {
     let status = app.connection_status();
     let color = app.connection_color();
 
-    let header = Line::from(vec![
+    let mut header_parts = vec![
         Span::styled(
             " mqtop ",
             Style::default()
@@ -100,17 +132,30 @@ fn render_header(frame: &mut Frame, app: &App, area: Rect) {
         )),
         Span::raw(" │ "),
         Span::raw(format!("Uptime: {}", app.stats.uptime_string())),
-    ]);
+    ];
+
+    if let Some(server) = app.active_server() {
+        header_parts.push(Span::raw(" │ "));
+        header_parts.push(Span::styled(
+            format!("Server: {}", server.name),
+            Style::default().fg(Color::Yellow),
+        ));
+    }
+
+    let header = Line::from(header_parts);
 
     frame.render_widget(Paragraph::new(header), area);
 }
 
 fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     let mode_hint = match app.input_mode {
-        InputMode::Normal => "q:Quit /:Search f:Filter s:Star y:Copy m:Track ?:Help",
+        InputMode::Normal => {
+            "q:Quit /:Search f:Filter S:Servers s:Star y:Copy m:Track H/L:Branch ?:Help"
+        }
         InputMode::Search => "Enter:Select  Esc:Cancel  ↑↓:Navigate results",
         InputMode::MetricSelect => "Enter:Track  Esc:Cancel  ↑↓/jk:Navigate",
         InputMode::Filter => "Enter:Apply  Esc:Cancel  (empty to clear)",
+        InputMode::ServerManager => "Enter:Edit  a:Add  d:Delete  Space:Activate  Esc:Close",
     };
 
     // Check for status message first

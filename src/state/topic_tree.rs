@@ -166,12 +166,7 @@ impl TopicTree {
 
     /// Get stats for a specific topic
     pub fn get_topic_stats(&self, topic: &str) -> Option<(u64, u64, Option<i64>)> {
-        let segments: Vec<&str> = topic.split('/').collect();
-        let mut current = &self.root;
-
-        for segment in &segments {
-            current = current.children.get(*segment)?;
-        }
+        let current = self.find_node(topic)?;
 
         if current.is_topic {
             Some((
@@ -181,6 +176,49 @@ impl TopicTree {
             ))
         } else {
             None
+        }
+    }
+
+    /// Get all expandable paths under a topic (including itself)
+    pub fn expandable_paths_from(&self, topic: &str) -> Vec<String> {
+        let mut result = Vec::new();
+        let Some(node) = self.find_node(topic) else {
+            return result;
+        };
+
+        if !topic.is_empty() && !node.children.is_empty() {
+            result.push(topic.to_string());
+        }
+
+        self.collect_expandable(node, topic, &mut result);
+        result
+    }
+
+    fn find_node(&self, topic: &str) -> Option<&TopicNode> {
+        let mut current = &self.root;
+        if topic.is_empty() {
+            return Some(current);
+        }
+
+        for segment in topic.split('/') {
+            current = current.children.get(segment)?;
+        }
+
+        Some(current)
+    }
+
+    fn collect_expandable(&self, node: &TopicNode, path: &str, result: &mut Vec<String>) {
+        for (segment, child) in &node.children {
+            let full_path = if path.is_empty() {
+                segment.clone()
+            } else {
+                format!("{}/{}", path, segment)
+            };
+
+            if !child.children.is_empty() {
+                result.push(full_path.clone());
+                self.collect_expandable(child, &full_path, result);
+            }
         }
     }
 

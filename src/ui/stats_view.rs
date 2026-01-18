@@ -31,13 +31,19 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(app.connection_color()),
         ),
     ]));
-    lines.push(Line::from(vec![
-        Span::raw("  Host: "),
-        Span::styled(
-            format!("{}:{}", app.config.mqtt.host, app.config.mqtt.port),
-            Style::default().fg(Color::Cyan),
-        ),
-    ]));
+    if let Some(server) = app.active_server() {
+        lines.push(Line::from(vec![
+            Span::raw("  Host: "),
+            Span::styled(
+                format!("{}:{}", server.host, server.port),
+                Style::default().fg(Color::Cyan),
+            ),
+        ]));
+        lines.push(Line::from(vec![
+            Span::raw("  Server: "),
+            Span::styled(server.name.clone(), Style::default().fg(Color::Yellow)),
+        ]));
+    }
     lines.push(Line::from(""));
 
     // Message stats
@@ -177,13 +183,15 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
         Span::raw("  Uptime: "),
         Span::styled(app.stats.uptime_string(), Style::default().fg(Color::White)),
     ]));
-    lines.push(Line::from(vec![
-        Span::raw("  Client: "),
-        Span::styled(
-            &app.config.mqtt.client_id,
-            Style::default().fg(Color::DarkGray),
-        ),
-    ]));
+    if let Some(server) = app.active_server() {
+        lines.push(Line::from(vec![
+            Span::raw("  Client: "),
+            Span::styled(
+                server.client_id.clone(),
+                Style::default().fg(Color::DarkGray),
+            ),
+        ]));
+    }
 
     // Latency info
     if app.latency_tracker.inter_arrival_count > 0 {

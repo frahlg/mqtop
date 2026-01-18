@@ -1,13 +1,15 @@
-use anyhow::{Context, Result};
-use serde::Deserialize;
+use anyhow::{bail, Context, Result};
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub mqtt: MqttConfig,
     #[serde(default)]
     pub ui: UiConfig,
 }
+
+pub const CONFIG_BACKUP_LIMIT: usize = 5;
 
 /// Parse color string to ratatui Color
 pub fn parse_color(color: &str) -> ratatui::style::Color {
@@ -32,7 +34,7 @@ pub fn parse_color(color: &str) -> ratatui::style::Color {
 }
 
 /// Topic color rule for highlighting topics in the tree view
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopicColorRule {
     /// Pattern to match (case-insensitive, matches segment or path)
     pub pattern: String,
@@ -60,7 +62,7 @@ impl TopicColorRule {
 }
 
 /// Topic category for counting in stats panel
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopicCategory {
     /// Display label in stats panel
     pub label: String,
@@ -87,8 +89,16 @@ impl TopicCategory {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MqttConfig {
+    pub active_server: String,
+    #[serde(default)]
+    pub servers: Vec<MqttServerConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MqttServerConfig {
+    pub name: String,
     pub host: String,
     #[serde(default = "default_port")]
     pub port: u16,
@@ -98,7 +108,6 @@ pub struct MqttConfig {
     /// Username for MQTT auth (defaults to client_id if not set)
     pub username: Option<String>,
     /// Token for authentication (goes in password field)
-    /// Can also be set via MQTT_TOKEN env var
     pub token: Option<String>,
     #[serde(default = "default_subscribe_topic")]
     pub subscribe_topic: String,
@@ -106,7 +115,7 @@ pub struct MqttConfig {
     pub keep_alive_secs: u64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UiConfig {
     #[serde(default = "default_message_buffer_size")]
     pub message_buffer_size: usize,
@@ -173,16 +182,20 @@ impl Config {
         Self::default_dir().join("config.toml")
     }
 
+    /// Get the config backup directory path (<config-dir>/backups/)
+    pub fn backup_dir_for(path: &Path) -> PathBuf {
+        path.parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("backups")
+    }
+
     /// Find config file using fallback chain:
-    /// 1. If explicit path provided and exists, use it
+    /// 1. If explicit path provided, use it
     /// 2. If ./config.toml exists in current directory, use it
     /// 3. Otherwise use ~/.config/mqtop/config.toml
     pub fn find_config_path(explicit_path: Option<&Path>) -> PathBuf {
-        // 1. Explicit path takes priority
         if let Some(path) = explicit_path {
-            if path.exists() {
-                return path.to_path_buf();
-            }
+            return path.to_path_buf();
         }
 
         // 2. Local config.toml in current directory
@@ -199,19 +212,173 @@ impl Config {
         let contents = std::fs::read_to_string(path.as_ref())
             .with_context(|| format!("Failed to read config file: {:?}", path.as_ref()))?;
 
-        let mut config: Config =
+        let config: Config =
             toml::from_str(&contents).with_context(|| "Failed to parse config file")?;
 
-        // Override token from environment if not set in config
-        if config.mqtt.token.is_none() {
-            config.mqtt.token = std::env::var("MQTT_TOKEN").ok();
+        config.validate()?;
+        Ok(config)
+    }
+
+    pub fn save_to<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        self.validate()?;
+
+        let path = path.as_ref();
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create config directory: {:?}", parent))?;
         }
 
-        Ok(config)
+        let contents =
+            toml::to_string_pretty(self).with_context(|| "Failed to serialize config")?;
+        std::fs::write(path, contents)
+            .with_context(|| format!("Failed to write config file: {:?}", path))?;
+        Ok(())
+    }
+
+    pub fn save_with_backup<P: AsRef<Path>>(&self, path: P, retention: usize) -> Result<()> {
+        let path = path.as_ref();
+        if path.exists() {
+            Self::create_backup(path)?;
+        }
+        self.save_to(path)?;
+        Self::prune_backups(path, retention)?;
+        Ok(())
+    }
+
+    pub fn backup_existing<P: AsRef<Path>>(path: P) -> Result<Option<PathBuf>> {
+        let path = path.as_ref();
+        if path.exists() {
+            return Ok(Some(Self::create_backup(path)?));
+        }
+        Ok(None)
+    }
+
+    pub fn list_backups<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>> {
+        let dir = Self::backup_dir_for(path.as_ref());
+        if !dir.exists() {
+            return Ok(Vec::new());
+        }
+
+        let mut entries: Vec<_> = std::fs::read_dir(&dir)
+            .with_context(|| format!("Failed to read backup directory: {:?}", dir))?
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| entry.path().is_file())
+            .collect();
+
+        entries.sort_by_key(|entry| entry.metadata().and_then(|meta| meta.modified()).ok());
+        entries.reverse();
+
+        Ok(entries.into_iter().map(|entry| entry.path()).collect())
+    }
+
+    pub fn rollback_backup<P: AsRef<Path>>(path: P, index: usize, retention: usize) -> Result<()> {
+        if index == 0 {
+            bail!("Backup index must start at 1");
+        }
+
+        let path = path.as_ref();
+        let backups = Self::list_backups(path)?;
+        let backup = backups
+            .get(index - 1)
+            .with_context(|| "Backup index out of range")?;
+
+        if path.exists() {
+            Self::create_backup(path)?;
+        }
+
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create config directory: {:?}", parent))?;
+        }
+
+        std::fs::copy(backup, path)
+            .with_context(|| format!("Failed to restore backup: {:?}", backup))?;
+
+        Self::prune_backups(path, retention)?;
+        Ok(())
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        if self.mqtt.servers.is_empty() {
+            bail!("No MQTT servers configured");
+        }
+        if self.mqtt.active_server.trim().is_empty() {
+            bail!("Active MQTT server name is empty");
+        }
+        if self.mqtt.active_server().is_none() {
+            bail!("Active MQTT server not found in server list");
+        }
+
+        let mut names = std::collections::HashSet::new();
+        for server in &self.mqtt.servers {
+            if server.name.trim().is_empty() {
+                bail!("MQTT server name cannot be empty");
+            }
+            if server.host.trim().is_empty() {
+                bail!("MQTT server host cannot be empty");
+            }
+            if !names.insert(server.name.clone()) {
+                bail!("Duplicate MQTT server name: {}", server.name);
+            }
+            if server.client_id.trim().is_empty() {
+                bail!("MQTT client_id cannot be empty (server: {})", server.name);
+            }
+        }
+        Ok(())
+    }
+
+    fn create_backup(path: &Path) -> Result<PathBuf> {
+        let backup_dir = Self::backup_dir_for(path);
+        std::fs::create_dir_all(&backup_dir)
+            .with_context(|| format!("Failed to create backup directory: {:?}", backup_dir))?;
+
+        let timestamp = chrono::Local::now().timestamp_millis();
+        let filename = format!("config-{}.toml", timestamp);
+        let backup_path = backup_dir.join(filename);
+
+        std::fs::copy(path, &backup_path)
+            .with_context(|| format!("Failed to create backup at {:?}", backup_path))?;
+
+        Ok(backup_path)
+    }
+
+    fn prune_backups(path: &Path, retention: usize) -> Result<()> {
+        let dir = Self::backup_dir_for(path);
+        if !dir.exists() {
+            return Ok(());
+        }
+
+        let backups = Self::list_backups(path)?;
+        if backups.len() <= retention {
+            return Ok(());
+        }
+
+        for backup in backups.iter().skip(retention) {
+            let _ = std::fs::remove_file(backup);
+        }
+
+        Ok(())
     }
 }
 
 impl MqttConfig {
+    pub fn active_index(&self) -> Option<usize> {
+        self.servers
+            .iter()
+            .position(|server| server.name == self.active_server)
+    }
+
+    pub fn active_server(&self) -> Option<&MqttServerConfig> {
+        self.active_index().and_then(|idx| self.servers.get(idx))
+    }
+
+    pub fn active_server_mut(&mut self) -> Option<&mut MqttServerConfig> {
+        let idx = self.active_index()?;
+        self.servers.get_mut(idx)
+    }
+}
+
+impl MqttServerConfig {
     /// Get the username, defaulting to client_id if not set
     pub fn get_username(&self) -> &str {
         self.username.as_deref().unwrap_or(&self.client_id)

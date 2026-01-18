@@ -7,7 +7,7 @@ use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, error, info, warn};
 
-use crate::config::MqttConfig;
+use crate::config::MqttServerConfig;
 use crate::mqtt::message::MqttMessage;
 use crate::mqtt::resilience::{BackoffStrategy, ConnectionHealth};
 
@@ -30,14 +30,14 @@ pub enum MqttEvent {
 
 pub struct MqttClient {
     client: AsyncClient,
-    config: Arc<MqttConfig>,
+    config: Arc<MqttServerConfig>,
     health: Arc<RwLock<ConnectionHealth>>,
 }
 
 impl MqttClient {
     /// Create a new MQTT client and start the event loop
     pub async fn connect(
-        config: MqttConfig,
+        config: MqttServerConfig,
         event_tx: mpsc::UnboundedSender<MqttEvent>,
     ) -> Result<Self> {
         Self::connect_with_backoff(config, event_tx, BackoffStrategy::default()).await
@@ -45,7 +45,7 @@ impl MqttClient {
 
     /// Create a new MQTT client with custom backoff strategy
     pub async fn connect_with_backoff(
-        config: MqttConfig,
+        config: MqttServerConfig,
         event_tx: mpsc::UnboundedSender<MqttEvent>,
         backoff: BackoffStrategy,
     ) -> Result<Self> {

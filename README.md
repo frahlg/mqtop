@@ -99,7 +99,10 @@ mqtop looks for configuration in this order:
 3. `~/.config/mqtop/config.toml` (recommended for global install)
 
 ```bash
-# For global config (recommended)
+# Quick interactive setup
+./mqtop --setup
+
+# Or for global config (recommended)
 mkdir -p ~/.config/mqtop
 cp config.toml.example ~/.config/mqtop/config.toml
 # Edit with your MQTT credentials
@@ -111,9 +114,8 @@ cp config.toml.example config.toml
 ### 2. Or use command-line arguments
 
 ```bash
-# With token in environment
-export MQTT_TOKEN="your-jwt-token"
-./mqtop --host mqtt.example.com --port 8883 --tls --client-id mydevice
+# With token passed via CLI
+./mqtop --host mqtt.example.com --port 8883 --tls --client-id mydevice --token "your-jwt-token"
 
 # Subscribe to specific topics
 ./mqtop -c config.toml --topic "sensors/#"
@@ -131,12 +133,17 @@ Create `config.toml` in `~/.config/mqtop/` or your working directory:
 
 ```toml
 [mqtt]
+active_server = "default"
+
+[[mqtt.servers]]
+name = "default"
 host = "mqtt.example.com"
 port = 8883
 use_tls = true
 client_id = "mqtop-explorer"
-token = "your-jwt-token"           # Or set MQTT_TOKEN env var
+token = "your-jwt-token"           # Stored in config
 subscribe_topic = "#"              # Subscribe to all topics
+keep_alive_secs = 30
 
 [ui]
 message_buffer_size = 100          # Messages kept per topic
@@ -164,12 +171,6 @@ pattern = "alerts"
 color = "red"
 ```
 
-### Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `MQTT_TOKEN` | JWT token for authentication (overrides config) |
-
 ### CLI Options
 
 ```
@@ -181,8 +182,12 @@ Options:
       --port <PORT>        MQTT broker port (overrides config)
       --client-id <ID>     Client ID (overrides config)
   -u, --username <USER>    Username (defaults to client_id)
+      --token <TOKEN>      Token (overrides config)
   -t, --topic <TOPIC>      Subscribe topic (overrides config)
       --tls                Enable TLS
+      --setup              Run interactive config wizard
+      --list-backups       List config backups
+      --rollback <INDEX>   Restore config from backup (1 = newest)
   -d, --debug              Enable debug logging to mqtop.log
   -h, --help               Print help
   -V, --version            Print version
@@ -197,20 +202,25 @@ Options:
 | `Tab` | Switch between panels (Topics → Messages → Stats) |
 | `1` `2` `3` | Jump to panel directly |
 | `↑` `↓` or `j` `k` | Move up/down |
-| `←` `→` or `h` `l` | Collapse/expand or move to parent |
+| `←` `→` or `h` `l` | Collapse/expand or move into child |
+| `H` `L` | Collapse/expand full branch |
 | `Enter` | Toggle expand/collapse |
 | `PgUp` `PgDn` | Page up/down |
 | `g` `G` | Go to top/bottom |
+
+On smaller terminals, mqtop automatically switches to 2-panel or 1-panel layouts.
 
 ### Search & Filter
 
 | Key | Action |
 |-----|--------|
 | `/` | Open fuzzy search |
+| `PgUp` `PgDn` | Scroll search results |
 | `f` | Set topic filter (MQTT wildcards) |
 | `F` | Clear topic filter |
 | `*` | Toggle starred-only view |
 | `Esc` | Cancel/close overlay |
+| `S` | Open server manager |
 
 **Filter examples:**
 - `sensors/#` - All sensor topics
@@ -224,6 +234,29 @@ Options:
 | `s` | Star/unstar current topic |
 | `y` | Copy topic path to clipboard |
 | `Y` | Copy payload to clipboard |
+
+### Server Manager
+
+| Key | Action |
+|-----|--------|
+| `S` | Open server manager |
+| `Enter` | Edit server |
+| `a` | Add server |
+| `d` | Delete server |
+| `Space` | Activate server |
+| `w` | Save config |
+| `Esc` | Close manager |
+
+### Server Edit
+
+| Key | Action |
+|-----|--------|
+| `Tab` `Shift+Tab` | Next/previous field |
+| `←` `→` `Home` `End` | Move cursor in field |
+| `Backspace` `Del` | Delete characters |
+| `Space` | Toggle TLS |
+| `Enter` | Save changes |
+| `Esc` | Cancel edit |
 
 ### Metrics & Display
 
@@ -270,6 +303,7 @@ Real-time statistics including:
 
 mqtop stores data in `~/.config/mqtop/`:
 - `config.toml` - Configuration file (optional, can also use `./config.toml`)
+- `backups/` - Rolling config backups (last 5)
 - `userdata.json` - Starred topics and tracked metrics (auto-saved)
 
 ## Troubleshooting

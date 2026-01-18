@@ -62,10 +62,19 @@ pub fn render_search(frame: &mut Frame, app: &App) {
         .alignment(Alignment::Center);
         frame.render_widget(no_results, chunks[1]);
     } else if !app.search_results.is_empty() {
+        let visible_height = chunks[1].height.saturating_sub(1) as usize;
+        let total = app.search_results.len();
+        let window = visible_height.max(1);
+        let max_start = total.saturating_sub(window);
+        let start = app.search_scroll.min(max_start);
+        let end = (start + window).min(total);
+
         let items: Vec<ListItem> = app
             .search_results
             .iter()
             .enumerate()
+            .skip(start)
+            .take(end.saturating_sub(start))
             .map(|(i, topic)| {
                 let is_selected = i == app.search_result_index;
                 let style = if is_selected {
@@ -76,7 +85,6 @@ pub fn render_search(frame: &mut Frame, app: &App) {
                     Style::default().fg(Color::White)
                 };
 
-                // Highlight matching part
                 let highlighted = highlight_match(topic, &app.search_query);
 
                 let prefix = if is_selected { "▶ " } else { "  " };
@@ -85,26 +93,23 @@ pub fn render_search(frame: &mut Frame, app: &App) {
 
                 ListItem::new(Line::from(spans))
             })
-            .take(20) // Limit displayed results
             .collect();
 
         let list = List::new(items);
         frame.render_widget(list, chunks[1]);
 
-        // Show result count
-        if app.search_results.len() > 20 {
-            let more = format!("... and {} more", app.search_results.len() - 20);
-            let more_text =
-                Paragraph::new(Span::styled(more, Style::default().fg(Color::DarkGray)))
-                    .alignment(Alignment::Right);
-
-            let count_area = Rect {
-                y: chunks[1].y + chunks[1].height.saturating_sub(1),
-                height: 1,
-                ..chunks[1]
-            };
-            frame.render_widget(more_text, count_area);
-        }
+        let count_text = format!("{}/{}", app.search_result_index + 1, total);
+        let more = Paragraph::new(Span::styled(
+            count_text,
+            Style::default().fg(Color::DarkGray),
+        ))
+        .alignment(Alignment::Right);
+        let count_area = Rect {
+            y: chunks[1].y + chunks[1].height.saturating_sub(1),
+            height: 1,
+            ..chunks[1]
+        };
+        frame.render_widget(more, count_area);
     } else {
         // Empty search - show hint
         let hint = Paragraph::new(vec![

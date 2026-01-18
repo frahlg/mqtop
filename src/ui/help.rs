@@ -69,6 +69,10 @@ pub fn render_help(frame: &mut Frame) {
             Span::raw("Open search"),
         ]),
         Line::from(vec![
+            Span::styled("  S           ", Style::default().fg(Color::Yellow)),
+            Span::raw("Manage MQTT servers"),
+        ]),
+        Line::from(vec![
             Span::styled("  s           ", Style::default().fg(Color::Yellow)),
             Span::raw("Star/unstar current topic"),
         ]),
@@ -81,8 +85,16 @@ pub fn render_help(frame: &mut Frame) {
             Span::raw("Set topic filter (MQTT wildcards)"),
         ]),
         Line::from(vec![
-            Span::styled("  F           ", Style::default().fg(Color::Yellow)),
-            Span::raw("Clear topic filter"),
+            Span::styled("  ↑↓ / jk    ", Style::default().fg(Color::Yellow)),
+            Span::raw("Navigate topics/messages"),
+        ]),
+        Line::from(vec![
+            Span::styled("  ←→ / hl    ", Style::default().fg(Color::Yellow)),
+            Span::raw("Collapse/expand or move into child"),
+        ]),
+        Line::from(vec![
+            Span::styled("  H / L      ", Style::default().fg(Color::Yellow)),
+            Span::raw("Collapse/expand full branch"),
         ]),
         Line::from(vec![
             Span::styled("  m           ", Style::default().fg(Color::Yellow)),
@@ -99,6 +111,14 @@ pub fn render_help(frame: &mut Frame) {
         Line::from(vec![
             Span::styled("  Esc         ", Style::default().fg(Color::Yellow)),
             Span::raw("Cancel search / Close help"),
+        ]),
+        Line::from(vec![
+            Span::styled("  Enter       ", Style::default().fg(Color::Yellow)),
+            Span::raw("Select search result"),
+        ]),
+        Line::from(vec![
+            Span::styled("  PgUp/PgDn   ", Style::default().fg(Color::Yellow)),
+            Span::raw("Scroll search results"),
         ]),
         Line::from(""),
         Line::from(vec![Span::styled(
