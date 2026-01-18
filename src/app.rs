@@ -1038,7 +1038,7 @@ impl App {
                             .config
                             .mqtt
                             .servers
-                            .get(0)
+                            .first()
                             .map(|s| s.name.clone())
                             .unwrap_or_default();
                     }
