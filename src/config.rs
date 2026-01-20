@@ -105,6 +105,11 @@ pub struct MqttServerConfig {
     #[serde(default)]
     pub use_tls: bool,
     pub client_id: String,
+    /// If true, use client_id exactly as specified (no auto-generated suffix)
+    /// If false and client_id is empty, generates "mqtop-{timestamp}"
+    /// If false and client_id is set, appends "-{timestamp}" for reconnect safety
+    #[serde(default)]
+    pub use_exact_client_id: bool,
     /// Username for MQTT auth (defaults to client_id if not set)
     pub username: Option<String>,
     /// Token for authentication (goes in password field)
@@ -299,13 +304,13 @@ impl Config {
     }
 
     pub fn validate(&self) -> Result<()> {
+        // Allow empty server list (user will configure via UI)
         if self.mqtt.servers.is_empty() {
-            bail!("No MQTT servers configured");
+            return Ok(());
         }
-        if self.mqtt.active_server.trim().is_empty() {
-            bail!("Active MQTT server name is empty");
-        }
-        if self.mqtt.active_server().is_none() {
+
+        // If there are servers, active_server must be valid
+        if !self.mqtt.active_server.trim().is_empty() && self.mqtt.active_server().is_none() {
             bail!("Active MQTT server not found in server list");
         }
 
@@ -320,8 +325,10 @@ impl Config {
             if !names.insert(server.name.clone()) {
                 bail!("Duplicate MQTT server name: {}", server.name);
             }
-            if server.client_id.trim().is_empty() {
-                bail!("MQTT client_id cannot be empty (server: {})", server.name);
+            // client_id is required only when use_exact_client_id is true
+            // otherwise it will be auto-generated
+            if server.use_exact_client_id && server.client_id.trim().is_empty() {
+                bail!("MQTT client_id cannot be empty when use_exact_client_id is enabled (server: {})", server.name);
             }
         }
         Ok(())

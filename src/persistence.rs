@@ -23,6 +23,10 @@ pub struct UserData {
     /// Tracked metrics (topic -> field name)
     #[serde(default)]
     pub tracked_metrics: Vec<TrackedMetric>,
+
+    /// Saved publish presets / bookmarks
+    #[serde(default)]
+    pub bookmarks: Vec<Bookmark>,
 }
 
 /// A metric being tracked for stats
@@ -31,6 +35,17 @@ pub struct TrackedMetric {
     pub topic_pattern: String,
     pub field_path: String,
     pub label: String,
+}
+
+/// A saved publish preset / bookmark
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Bookmark {
+    pub name: String,    // Display name (e.g., "Temp sensor alert")
+    pub topic: String,   // MQTT topic
+    pub payload: String, // Default payload
+    pub qos: u8,         // 0, 1, 2
+    pub retain: bool,
+    pub category: Option<String>, // Optional: "testing", "alerts", etc.
 }
 
 impl UserData {
@@ -127,6 +142,37 @@ impl UserData {
     /// Remove a tracked metric by label
     pub fn remove_tracked_metric(&mut self, label: &str) {
         self.tracked_metrics.retain(|m| m.label != label);
+    }
+
+    /// Add a new bookmark
+    pub fn add_bookmark(&mut self, bookmark: Bookmark) {
+        self.bookmarks.push(bookmark);
+    }
+
+    /// Update an existing bookmark at index
+    pub fn update_bookmark(&mut self, index: usize, bookmark: Bookmark) {
+        if index < self.bookmarks.len() {
+            self.bookmarks[index] = bookmark;
+        }
+    }
+
+    /// Remove a bookmark by index
+    pub fn remove_bookmark(&mut self, index: usize) {
+        if index < self.bookmarks.len() {
+            self.bookmarks.remove(index);
+        }
+    }
+
+    /// Get unique categories from existing bookmarks
+    pub fn bookmark_categories(&self) -> Vec<String> {
+        let mut categories: Vec<String> = self
+            .bookmarks
+            .iter()
+            .filter_map(|b| b.category.clone())
+            .collect();
+        categories.sort();
+        categories.dedup();
+        categories
     }
 }
 

@@ -4,6 +4,7 @@ use anyhow::Result;
 use rumqttc::{AsyncClient, Event, MqttOptions, Packet, QoS, Transport};
 use std::sync::Arc;
 use std::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, error, info, warn};
 
@@ -52,8 +53,11 @@ impl MqttClient {
         let config = Arc::new(config);
         let health = Arc::new(RwLock::new(ConnectionHealth::new(backoff)));
 
-        // Build MQTT options
-        let mut mqttoptions = MqttOptions::new(&config.client_id, &config.host, config.port);
+        // Build MQTT options with client_id based on configuration
+        let unique_client_id =
+            Self::generate_client_id(&config.client_id, config.use_exact_client_id);
+        info!("Connecting with client_id: {}", unique_client_id);
+        let mut mqttoptions = MqttOptions::new(&unique_client_id, &config.host, config.port);
 
         // Set authentication: username (defaults to client_id), password = token
         mqttoptions.set_credentials(config.get_username(), config.get_token());
@@ -199,9 +203,9 @@ impl MqttClient {
         Ok(())
     }
 
-    /// Publish a message (useful for testing)
-    pub async fn publish(&self, topic: &str, payload: &[u8], qos: QoS) -> Result<()> {
-        self.client.publish(topic, qos, false, payload).await?;
+    /// Publish a message
+    pub async fn publish(&self, topic: &str, payload: &[u8], qos: QoS, retain: bool) -> Result<()> {
+        self.client.publish(topic, qos, retain, payload).await?;
         Ok(())
     }
 
@@ -229,5 +233,28 @@ impl MqttClient {
     /// Get the last error message if any
     pub async fn last_error(&self) -> Option<String> {
         self.health.read().await.last_error().map(|s| s.to_string())
+    }
+
+    /// Generate a client_id for MQTT connection
+    /// - If use_exact_client_id is true: use client_id exactly as specified
+    /// - If use_exact_client_id is false and client_id is empty: generate "mqtop-{timestamp}"
+    /// - If use_exact_client_id is false and client_id is set: append "-{timestamp}" for reconnect safety
+    fn generate_client_id(configured_id: &str, use_exact: bool) -> String {
+        if use_exact {
+            // User wants exact client_id (for auth purposes or persistent sessions)
+            return configured_id.to_string();
+        }
+
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() % 100000)
+            .unwrap_or(0);
+
+        if configured_id.trim().is_empty() {
+            format!("mqtop-{}", timestamp)
+        } else {
+            // Append timestamp suffix for reconnect safety
+            format!("{}-{}", configured_id, timestamp)
+        }
     }
 }

@@ -1,7 +1,9 @@
+mod bookmarks;
 mod filter;
 mod help;
 mod message_view;
 mod metric_select;
+mod publish;
 mod search;
 mod server_manager;
 mod stats_view;
@@ -17,10 +19,12 @@ use ratatui::{
 
 use crate::app::{App, InputMode, Panel};
 
+pub use bookmarks::render_bookmark_manager;
 pub use filter::render_filter;
 pub use help::render_help;
 pub use message_view::render_messages;
 pub use metric_select::render_metric_select;
+pub use publish::render_publish;
 pub use search::render_search;
 pub use server_manager::render_server_manager;
 pub use stats_view::render_stats;
@@ -104,6 +108,14 @@ pub fn render(frame: &mut Frame, app: &App) {
         render_server_manager(frame, app);
     }
 
+    if app.input_mode == InputMode::Publish {
+        render_publish(frame, app);
+    }
+
+    if app.input_mode == InputMode::BookmarkManager {
+        render_bookmark_manager(frame, app);
+    }
+
     if app.show_help {
         render_help(frame);
     }
@@ -150,12 +162,14 @@ fn render_header(frame: &mut Frame, app: &App, area: Rect) {
 fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     let mode_hint = match app.input_mode {
         InputMode::Normal => {
-            "q:Quit /:Search f:Filter S:Servers s:Star y:Copy m:Track H/L:Branch ?:Help"
+            "q:Quit /:Search f:Filter S:Servers P:Publish B:Bookmarks s:Star y:Copy m:Track ?:Help"
         }
         InputMode::Search => "Enter:Select  Esc:Cancel  ↑↓:Navigate results",
         InputMode::MetricSelect => "Enter:Track  Esc:Cancel  ↑↓/jk:Navigate",
         InputMode::Filter => "Enter:Apply  Esc:Cancel  (empty to clear)",
         InputMode::ServerManager => "Enter:Edit  a:Add  d:Delete  Space:Activate  Esc:Close",
+        InputMode::Publish => "Enter:Publish  Tab:Next field  Ctrl+S:Save Bookmark  Esc:Cancel",
+        InputMode::BookmarkManager => "Enter:Publish  e:Edit  a:Add  d:Delete  Esc:Close",
     };
 
     // Check for status message first

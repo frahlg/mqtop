@@ -74,6 +74,24 @@ fn prompt_bool(label: &str, default: bool) -> Result<bool> {
     ))
 }
 
+fn create_default_config(config_path: &std::path::Path) -> Result<Config> {
+    let config = Config {
+        mqtt: MqttConfig {
+            active_server: String::new(),
+            servers: Vec::new(),
+        },
+        ui: config::UiConfig::default(),
+    };
+
+    // Create config directory if needed
+    if let Some(parent) = config_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    // Don't save empty config - it will be saved when user adds first server
+    Ok(config)
+}
+
 fn run_config_wizard(config_path: &PathBuf) -> Result<Config> {
     println!("mqtop setup wizard");
     println!("Config path: {}", config_path.display());
@@ -105,6 +123,7 @@ fn run_config_wizard(config_path: &PathBuf) -> Result<Config> {
         port,
         use_tls,
         client_id: client_id.trim().to_string(),
+        use_exact_client_id: false, // Default to auto-suffix for reconnect safety
         username: if username.trim().is_empty() {
             None
         } else {
@@ -235,23 +254,28 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    let mut config = if config_path.exists() && !args.setup {
+    let mut config = if args.setup {
+        // Explicit setup requested via --setup flag
+        run_config_wizard(&config_path)?
+    } else if config_path.exists() {
         match Config::load(&config_path) {
             Ok(config) => config,
             Err(err) => {
                 eprintln!("Config load failed: {}", err);
                 let _ = Config::backup_existing(&config_path);
-                run_config_wizard(&config_path)?
+                // Create default empty config - user will configure via Server Manager
+                create_default_config(&config_path)?
             }
         }
     } else {
-        run_config_wizard(&config_path)?
+        // No config file - create default empty config
+        // User will configure via Server Manager UI (press 'a' to add server)
+        create_default_config(&config_path)?
     };
 
-    if config.mqtt.active_server().is_none() {
-        eprintln!("Active server is not defined. Run with --setup to configure.");
-        std::process::exit(1);
-    }
+    // Check if we have servers configured
+    let needs_server_setup =
+        config.mqtt.servers.is_empty() || config.mqtt.active_server().is_none();
 
     // Override config with CLI args (active server only)
     if let Some(server) = config.mqtt.active_server_mut() {
@@ -278,22 +302,25 @@ async fn main() -> Result<()> {
         }
     }
 
-    config
-        .save_with_backup(&config_path, CONFIG_BACKUP_LIMIT)
-        .context("Failed to persist config")?;
+    // Only save config if we have servers (avoid saving empty config)
+    if !needs_server_setup {
+        config
+            .save_with_backup(&config_path, CONFIG_BACKUP_LIMIT)
+            .context("Failed to persist config")?;
 
-    let active = config
-        .mqtt
-        .active_server()
-        .context("Active MQTT server missing")?;
-    info!("Starting mqtop");
-    info!("Connecting to {}:{}", active.host, active.port);
+        if let Some(active) = config.mqtt.active_server() {
+            info!("Starting mqtop");
+            info!("Connecting to {}:{}", active.host, active.port);
+        }
+    } else {
+        info!("Starting mqtop - no servers configured");
+    }
 
     // Run the TUI application
-    run_app(config, config_path).await
+    run_app(config, config_path, needs_server_setup).await
 }
 
-async fn run_app(config: Config, config_path: PathBuf) -> Result<()> {
+async fn run_app(config: Config, config_path: PathBuf, needs_server_setup: bool) -> Result<()> {
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -308,8 +335,15 @@ async fn run_app(config: Config, config_path: PathBuf) -> Result<()> {
     // Create channel for MQTT events
     let (mqtt_tx, mut mqtt_rx) = mpsc::unbounded_channel::<MqttEvent>();
 
-    // Start MQTT client
-    let mut mqtt_client = connect_mqtt(&app, mqtt_tx.clone()).await?;
+    // Start MQTT client only if we have servers configured
+    let mut mqtt_client: Option<MqttClient> = if !needs_server_setup {
+        Some(connect_mqtt(&app, mqtt_tx.clone()).await?)
+    } else {
+        // Open Server Manager automatically when no servers are configured
+        app.open_server_manager();
+        app.set_status("No servers configured - press 'a' to add one");
+        None
+    };
 
     // Main loop
     loop {
@@ -334,11 +368,39 @@ async fn run_app(config: Config, config_path: PathBuf) -> Result<()> {
         }
 
         if let Some(index) = app.pending_server_switch.take() {
-            if let Err(err) = mqtt_client.disconnect().await {
-                tracing::warn!("Failed to disconnect MQTT client: {:?}", err);
+            // Disconnect existing client if any
+            if let Some(ref client) = mqtt_client {
+                if let Err(err) = client.disconnect().await {
+                    tracing::warn!("Failed to disconnect MQTT client: {:?}", err);
+                }
             }
             app.reset_for_server_switch(index)?;
-            mqtt_client = connect_mqtt(&app, mqtt_tx.clone()).await?;
+            mqtt_client = Some(connect_mqtt(&app, mqtt_tx.clone()).await?);
+        }
+
+        // Handle pending publish
+        if let Some(publish) = app.pending_publish.take() {
+            if let Some(ref client) = mqtt_client {
+                let qos = match publish.qos {
+                    0 => rumqttc::QoS::AtMostOnce,
+                    1 => rumqttc::QoS::AtLeastOnce,
+                    _ => rumqttc::QoS::ExactlyOnce,
+                };
+                match client
+                    .publish(&publish.topic, &publish.payload, qos, publish.retain)
+                    .await
+                {
+                    Ok(()) => {
+                        app.set_status(&format!("Published to {}", publish.topic));
+                    }
+                    Err(err) => {
+                        app.set_status(&format!("Publish failed: {}", err));
+                        tracing::error!("Publish failed: {:?}", err);
+                    }
+                }
+            } else {
+                app.set_status("Cannot publish: not connected");
+            }
         }
 
         if app.should_quit {

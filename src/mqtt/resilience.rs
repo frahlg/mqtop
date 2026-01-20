@@ -18,8 +18,8 @@ pub struct BackoffStrategy {
 impl Default for BackoffStrategy {
     fn default() -> Self {
         Self {
-            base_delay_ms: 100,
-            max_delay: Duration::from_secs(30),
+            base_delay_ms: 5000, // Start at 5 seconds instead of 100ms
+            max_delay: Duration::from_secs(60),
             max_attempts: None, // Never give up
             jitter_factor: 0.1,
         }

@@ -35,6 +35,8 @@ A high-performance MQTT explorer TUI built in Rust by Sourceful Energy. Like hto
 - **MQTT wildcard filters** - Filter topics using `+` and `#` patterns
 - **Latency monitoring** - Track message delays and jitter
 - **Starred topics** - Bookmark important topics with persistence
+- **Publish bookmarks** - Save publish presets for quick one-click testing
+- **MQTT publishing** - Publish messages directly from the TUI with QoS and retain options
 - **Clipboard support** - Copy topics and payloads
 - **JSON syntax highlighting** - Pretty-printed payload inspection
 - **Vim-style navigation** - `hjkl`, arrows, and more
@@ -258,6 +260,75 @@ On smaller terminals, mqtop automatically switches to 2-panel or 1-panel layouts
 | `Enter` | Save changes |
 | `Esc` | Cancel edit |
 
+### Publishing Messages
+
+mqtop allows you to publish MQTT messages directly from the TUI, perfect for testing and debugging.
+
+| Key | Action |
+|-----|--------|
+| `P` | Open publish dialog |
+| `Ctrl+P` | Copy current message to publish dialog |
+| `Tab` `Shift+Tab` | Navigate between fields |
+| `Space` | Toggle QoS (0/1/2) or Retain on/off |
+| `0` `1` `2` | Set QoS directly |
+| `Ctrl+S` | Save as bookmark |
+| `Enter` | Publish message |
+| `Esc` | Cancel |
+
+**Publish Dialog Fields:**
+- **Topic** - MQTT topic to publish to
+- **Payload** - Message content (supports multi-line)
+- **QoS** - Quality of Service (0=At most once, 1=At least once, 2=Exactly once)
+- **Retain** - Whether the broker should retain the message
+
+### Bookmarks (Publish Presets)
+
+Save frequently-used publish settings as bookmarks for quick one-click publishing. Perfect for:
+- Testing device commands
+- Sending alert triggers
+- Debugging with specific payloads
+- Rapid-fire testing scenarios
+
+| Key | Action |
+|-----|--------|
+| `B` | Open bookmark manager |
+| `Enter` | **Quick publish** selected bookmark (stays open for rapid testing) |
+| `a` | Add new bookmark |
+| `e` | Edit selected bookmark |
+| `d` | Delete selected bookmark |
+| `↑` `↓` or `j` `k` | Navigate bookmarks |
+| `Esc` | Close bookmark manager |
+
+**Bookmark Fields:**
+- **Name** - Display name (e.g., "Temperature Alert")
+- **Category** - Optional grouping (e.g., "testing", "alerts") - bookmarks are grouped by category
+- **Topic** - MQTT topic
+- **Payload** - Default payload content
+- **QoS** - Quality of Service level
+- **Retain** - Retain flag
+
+**Quick Workflows:**
+
+1. **Save from Publish Dialog:**
+   - Press `P` to open publish dialog
+   - Fill in topic, payload, QoS, retain
+   - Press `Ctrl+S` to save as bookmark
+   - Edit the name and category, then `Enter` to save
+
+2. **Rapid-Fire Testing:**
+   - Press `B` to open bookmark manager
+   - Navigate to desired preset
+   - Press `Enter` to publish (manager stays open)
+   - Repeat for rapid testing
+
+3. **Copy & Modify:**
+   - Select a topic in the tree
+   - Press `Ctrl+P` to copy to publish dialog
+   - Modify payload as needed
+   - Press `Ctrl+S` to save as bookmark for future use
+
+Bookmarks are persisted in `~/.config/mqtop/userdata.json` and survive restarts.
+
 ### Metrics & Display
 
 | Key | Action |
@@ -304,7 +375,7 @@ Real-time statistics including:
 mqtop stores data in `~/.config/mqtop/`:
 - `config.toml` - Configuration file (optional, can also use `./config.toml`)
 - `backups/` - Rolling config backups (last 5)
-- `userdata.json` - Starred topics and tracked metrics (auto-saved)
+- `userdata.json` - Starred topics, tracked metrics, and publish bookmarks (auto-saved)
 
 ## Troubleshooting
 

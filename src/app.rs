@@ -8,7 +8,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 
 use crate::config::{Config, MqttServerConfig, CONFIG_BACKUP_LIMIT};
 use crate::mqtt::{ConnectionState, MqttEvent, MqttMessage};
-use crate::persistence::UserData;
+use crate::persistence::{Bookmark, UserData};
 use crate::state::metric_tracker::topic_matches;
 use crate::state::{
     get_numeric_fields, DeviceTracker, LatencyTracker, MessageBuffer, MetricTracker, SchemaTracker,
@@ -31,6 +31,8 @@ pub enum InputMode {
     MetricSelect,
     Filter,
     ServerManager,
+    Publish,
+    BookmarkManager,
 }
 
 /// Filter mode for topic tree
@@ -116,6 +118,12 @@ pub struct App {
     pub server_manager_index: usize,
     /// Server edit buffer
     pub server_edit: ServerEditState,
+    /// Publish edit buffer
+    pub publish_edit: PublishEditState,
+    /// Pending publish to send
+    pub pending_publish: Option<PendingPublish>,
+    /// Bookmark manager state
+    pub bookmark_manager: BookmarkManagerState,
 }
 
 #[derive(Debug, Clone)]
@@ -130,6 +138,7 @@ pub struct ServerEditState {
     pub port: String,
     pub use_tls: bool,
     pub client_id: String,
+    pub use_exact_client_id: bool,
     pub username: String,
     pub token: String,
     pub subscribe_topic: String,
@@ -143,6 +152,7 @@ pub enum ServerField {
     Port,
     UseTls,
     ClientId,
+    UseExactClientId,
     Username,
     Token,
     SubscribeTopic,
@@ -170,6 +180,7 @@ impl Default for ServerEditState {
             port: String::new(),
             use_tls: false,
             client_id: String::new(),
+            use_exact_client_id: false,
             username: String::new(),
             token: String::new(),
             subscribe_topic: String::new(),
@@ -178,13 +189,148 @@ impl Default for ServerEditState {
     }
 }
 
+/// Field in publish dialog
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PublishField {
+    Topic,
+    Payload,
+    Qos,
+    Retain,
+}
+
+impl PublishField {
+    pub const ALL: [PublishField; 4] = [
+        PublishField::Topic,
+        PublishField::Payload,
+        PublishField::Qos,
+        PublishField::Retain,
+    ];
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            PublishField::Topic => "Topic",
+            PublishField::Payload => "Payload",
+            PublishField::Qos => "QoS",
+            PublishField::Retain => "Retain",
+        }
+    }
+}
+
+/// State for publish dialog
+#[derive(Debug, Clone)]
+pub struct PublishEditState {
+    pub active: bool,
+    pub field: PublishField,
+    pub cursor: usize,
+    pub topic: String,
+    pub payload: String,
+    pub qos: u8,
+    pub retain: bool,
+}
+
+impl Default for PublishEditState {
+    fn default() -> Self {
+        Self {
+            active: false,
+            field: PublishField::Topic,
+            cursor: 0,
+            topic: String::new(),
+            payload: String::new(),
+            qos: 0,
+            retain: false,
+        }
+    }
+}
+
+/// Pending publish message to be sent
+#[derive(Debug, Clone)]
+pub struct PendingPublish {
+    pub topic: String,
+    pub payload: Vec<u8>,
+    pub qos: u8,
+    pub retain: bool,
+}
+
+/// State for bookmark manager
+#[derive(Debug, Clone, Default)]
+pub struct BookmarkManagerState {
+    pub selected_index: usize,
+    pub editing: Option<BookmarkEditState>,
+}
+
+/// State for editing a bookmark
+#[derive(Debug, Clone)]
+pub struct BookmarkEditState {
+    pub is_new: bool,
+    pub index: usize,
+    pub field: BookmarkField,
+    pub cursor: usize,
+    pub name: String,
+    pub topic: String,
+    pub payload: String,
+    pub qos: u8,
+    pub retain: bool,
+    pub category: String,
+}
+
+impl Default for BookmarkEditState {
+    fn default() -> Self {
+        Self {
+            is_new: true,
+            index: 0,
+            field: BookmarkField::Name,
+            cursor: 0,
+            name: String::new(),
+            topic: String::new(),
+            payload: String::new(),
+            qos: 0,
+            retain: false,
+            category: String::new(),
+        }
+    }
+}
+
+/// Field in bookmark edit dialog
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BookmarkField {
+    Name,
+    Category,
+    Topic,
+    Payload,
+    Qos,
+    Retain,
+}
+
+impl BookmarkField {
+    pub const ALL: [BookmarkField; 6] = [
+        BookmarkField::Name,
+        BookmarkField::Category,
+        BookmarkField::Topic,
+        BookmarkField::Payload,
+        BookmarkField::Qos,
+        BookmarkField::Retain,
+    ];
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            BookmarkField::Name => "Name",
+            BookmarkField::Category => "Category",
+            BookmarkField::Topic => "Topic",
+            BookmarkField::Payload => "Payload",
+            BookmarkField::Qos => "QoS",
+            BookmarkField::Retain => "Retain",
+        }
+    }
+}
+
 impl ServerField {
-    pub const ALL: [ServerField; 9] = [
+    pub const ALL: [ServerField; 10] = [
         ServerField::Name,
         ServerField::Host,
         ServerField::Port,
         ServerField::UseTls,
         ServerField::ClientId,
+        ServerField::UseExactClientId,
         ServerField::Username,
         ServerField::Token,
         ServerField::SubscribeTopic,
@@ -198,6 +344,7 @@ impl ServerField {
             ServerField::Port => "Port",
             ServerField::UseTls => "TLS",
             ServerField::ClientId => "Client ID",
+            ServerField::UseExactClientId => "Exact ID",
             ServerField::Username => "Username",
             ServerField::Token => "Token",
             ServerField::SubscribeTopic => "Subscribe",
@@ -250,6 +397,9 @@ impl App {
             pending_server_switch: None,
             server_manager_index: 0,
             server_edit: ServerEditState::default(),
+            publish_edit: PublishEditState::default(),
+            pending_publish: None,
+            bookmark_manager: BookmarkManagerState::default(),
         }
     }
 
@@ -347,6 +497,8 @@ impl App {
             InputMode::MetricSelect => self.handle_metric_select_input(code, modifiers),
             InputMode::Filter => self.handle_filter_input(code, modifiers),
             InputMode::ServerManager => self.handle_server_manager_input(code, modifiers),
+            InputMode::Publish => self.handle_publish_input(code, modifiers),
+            InputMode::BookmarkManager => self.handle_bookmark_manager_input(code, modifiers),
         }
     }
 
@@ -497,6 +649,211 @@ impl App {
         self.set_status("Server manager");
     }
 
+    /// Open publish dialog with empty fields
+    pub fn open_publish_dialog(&mut self) {
+        self.publish_edit = PublishEditState {
+            active: true,
+            field: PublishField::Topic,
+            cursor: 0,
+            topic: self.selected_topic.clone().unwrap_or_default(),
+            payload: String::new(),
+            qos: 0,
+            retain: false,
+        };
+        self.publish_edit.cursor = self.publish_edit.topic.len();
+        self.input_mode = InputMode::Publish;
+    }
+
+    /// Copy current message to publish dialog
+    pub fn copy_message_to_publish(&mut self) {
+        let messages = self.get_current_messages();
+        if let Some(msg) = messages.first() {
+            self.publish_edit = PublishEditState {
+                active: true,
+                field: PublishField::Topic,
+                cursor: msg.topic.len(),
+                topic: msg.topic.clone(),
+                payload: self.format_payload(msg),
+                qos: msg.qos,
+                retain: msg.retain,
+            };
+            self.input_mode = InputMode::Publish;
+            self.set_status("Message copied to publish");
+        } else {
+            self.set_status("No message to copy");
+        }
+    }
+
+    fn handle_publish_input(&mut self, code: KeyCode, modifiers: KeyModifiers) {
+        // Handle Ctrl+S to save as bookmark
+        if modifiers.contains(KeyModifiers::CONTROL) && code == KeyCode::Char('s') {
+            self.save_publish_as_bookmark();
+            return;
+        }
+
+        match code {
+            KeyCode::Esc => {
+                self.input_mode = InputMode::Normal;
+                self.publish_edit.active = false;
+            }
+            KeyCode::Enter => {
+                // Validate and create pending publish
+                if self.publish_edit.topic.trim().is_empty() {
+                    self.set_status("Topic cannot be empty");
+                    return;
+                }
+                self.pending_publish = Some(PendingPublish {
+                    topic: self.publish_edit.topic.trim().to_string(),
+                    payload: self.publish_edit.payload.as_bytes().to_vec(),
+                    qos: self.publish_edit.qos,
+                    retain: self.publish_edit.retain,
+                });
+                self.input_mode = InputMode::Normal;
+                self.publish_edit.active = false;
+            }
+            KeyCode::Tab => {
+                self.publish_edit.field = self.next_publish_field(self.publish_edit.field);
+                self.publish_edit.cursor = self.publish_field_value(self.publish_edit.field).len();
+            }
+            KeyCode::BackTab => {
+                self.publish_edit.field = self.prev_publish_field(self.publish_edit.field);
+                self.publish_edit.cursor = self.publish_field_value(self.publish_edit.field).len();
+            }
+            KeyCode::Left => {
+                if self.publish_edit.cursor > 0 {
+                    self.publish_edit.cursor -= 1;
+                }
+            }
+            KeyCode::Right => {
+                let max = self.publish_field_value(self.publish_edit.field).len();
+                if self.publish_edit.cursor < max {
+                    self.publish_edit.cursor += 1;
+                }
+            }
+            KeyCode::Home => {
+                self.publish_edit.cursor = 0;
+            }
+            KeyCode::End => {
+                self.publish_edit.cursor = self.publish_field_value(self.publish_edit.field).len();
+            }
+            // QoS field: 0, 1, 2 to set directly, space to cycle
+            KeyCode::Char('0') if self.publish_edit.field == PublishField::Qos => {
+                self.publish_edit.qos = 0;
+            }
+            KeyCode::Char('1') if self.publish_edit.field == PublishField::Qos => {
+                self.publish_edit.qos = 1;
+            }
+            KeyCode::Char('2') if self.publish_edit.field == PublishField::Qos => {
+                self.publish_edit.qos = 2;
+            }
+            KeyCode::Char(' ') if self.publish_edit.field == PublishField::Qos => {
+                self.publish_edit.qos = (self.publish_edit.qos + 1) % 3;
+            }
+            // Retain field: space to toggle
+            KeyCode::Char(' ') if self.publish_edit.field == PublishField::Retain => {
+                self.publish_edit.retain = !self.publish_edit.retain;
+            }
+            KeyCode::Backspace => {
+                if matches!(
+                    self.publish_edit.field,
+                    PublishField::Topic | PublishField::Payload
+                ) {
+                    self.publish_edit_backspace();
+                }
+            }
+            KeyCode::Delete => {
+                if matches!(
+                    self.publish_edit.field,
+                    PublishField::Topic | PublishField::Payload
+                ) {
+                    self.publish_edit_delete();
+                }
+            }
+            KeyCode::Char(c) => {
+                if matches!(
+                    self.publish_edit.field,
+                    PublishField::Topic | PublishField::Payload
+                ) {
+                    self.publish_edit_insert(c);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn publish_edit_mut_field(&mut self) -> &mut String {
+        match self.publish_edit.field {
+            PublishField::Topic => &mut self.publish_edit.topic,
+            PublishField::Payload => &mut self.publish_edit.payload,
+            _ => &mut self.publish_edit.topic, // dummy for non-text fields
+        }
+    }
+
+    fn publish_edit_insert(&mut self, ch: char) {
+        let mut cursor = self.publish_edit.cursor;
+        let value = self.publish_edit_mut_field();
+        if cursor > value.len() {
+            cursor = value.len();
+        }
+        value.insert(cursor, ch);
+        self.publish_edit.cursor = cursor.saturating_add(1);
+    }
+
+    fn publish_edit_backspace(&mut self) {
+        let mut cursor = self.publish_edit.cursor;
+        let value = self.publish_edit_mut_field();
+        if cursor == 0 || value.is_empty() {
+            return;
+        }
+        if cursor > value.len() {
+            cursor = value.len();
+        }
+        let remove_at = cursor.saturating_sub(1);
+        value.remove(remove_at);
+        self.publish_edit.cursor = cursor.saturating_sub(1);
+    }
+
+    fn publish_edit_delete(&mut self) {
+        let cursor = self.publish_edit.cursor;
+        let value = self.publish_edit_mut_field();
+        if value.is_empty() || cursor >= value.len() {
+            return;
+        }
+        value.remove(cursor);
+    }
+
+    pub fn publish_field_value(&self, field: PublishField) -> String {
+        match field {
+            PublishField::Topic => self.publish_edit.topic.clone(),
+            PublishField::Payload => self.publish_edit.payload.clone(),
+            PublishField::Qos => self.publish_edit.qos.to_string(),
+            PublishField::Retain => if self.publish_edit.retain {
+                "on"
+            } else {
+                "off"
+            }
+            .to_string(),
+        }
+    }
+
+    fn next_publish_field(&self, field: PublishField) -> PublishField {
+        let idx = PublishField::ALL
+            .iter()
+            .position(|f| *f == field)
+            .unwrap_or(0);
+        let next = (idx + 1) % PublishField::ALL.len();
+        PublishField::ALL[next]
+    }
+
+    fn prev_publish_field(&self, field: PublishField) -> PublishField {
+        let idx = PublishField::ALL
+            .iter()
+            .position(|f| *f == field)
+            .unwrap_or(0);
+        let prev = idx.checked_sub(1).unwrap_or(PublishField::ALL.len() - 1);
+        PublishField::ALL[prev]
+    }
+
     fn handle_search_input(&mut self, code: KeyCode, _modifiers: KeyModifiers) {
         match code {
             KeyCode::Esc => {
@@ -575,6 +932,11 @@ impl App {
                     self.should_quit = true;
                     return;
                 }
+                KeyCode::Char('p') => {
+                    // Copy current message to publish dialog
+                    self.copy_message_to_publish();
+                    return;
+                }
                 _ => {}
             }
         }
@@ -604,6 +966,9 @@ impl App {
 
             // Payload mode toggle
             KeyCode::Char('p') => self.cycle_payload_mode(),
+
+            // Open publish dialog
+            KeyCode::Char('P') => self.open_publish_dialog(),
 
             // Clear stats
             KeyCode::Char('c') => self.stats.reset(),
@@ -645,6 +1010,9 @@ impl App {
             KeyCode::Home | KeyCode::Char('g') => self.goto_top(),
             KeyCode::End | KeyCode::Char('G') => self.goto_bottom(),
             KeyCode::Char('S') => self.open_server_manager(),
+
+            // Open bookmark manager
+            KeyCode::Char('B') => self.open_bookmark_manager(),
 
             // Escape closes help
             KeyCode::Esc => {
@@ -1082,6 +1450,7 @@ impl App {
             self.server_edit.port = server.port.to_string();
             self.server_edit.use_tls = server.use_tls;
             self.server_edit.client_id = server.client_id.clone();
+            self.server_edit.use_exact_client_id = server.use_exact_client_id;
             self.server_edit.username = server.username.clone().unwrap_or_default();
             self.server_edit.token = server.token.clone().unwrap_or_default();
             self.server_edit.subscribe_topic = server.subscribe_topic.clone();
@@ -1094,6 +1463,7 @@ impl App {
             self.server_edit.port = "1883".to_string();
             self.server_edit.use_tls = false;
             self.server_edit.client_id.clear();
+            self.server_edit.use_exact_client_id = false;
             self.server_edit.username.clear();
             self.server_edit.token.clear();
             self.server_edit.subscribe_topic = "#".to_string();
@@ -1146,18 +1516,30 @@ impl App {
             KeyCode::Char(' ') if self.server_edit.field == ServerField::UseTls => {
                 self.server_edit.use_tls = !self.server_edit.use_tls;
             }
+            KeyCode::Char(' ') if self.server_edit.field == ServerField::UseExactClientId => {
+                self.server_edit.use_exact_client_id = !self.server_edit.use_exact_client_id;
+            }
             KeyCode::Backspace => {
-                if self.server_edit.field != ServerField::UseTls {
+                if !matches!(
+                    self.server_edit.field,
+                    ServerField::UseTls | ServerField::UseExactClientId
+                ) {
                     self.server_edit_backspace();
                 }
             }
             KeyCode::Delete => {
-                if self.server_edit.field != ServerField::UseTls {
+                if !matches!(
+                    self.server_edit.field,
+                    ServerField::UseTls | ServerField::UseExactClientId
+                ) {
                     self.server_edit_delete();
                 }
             }
             KeyCode::Char(c) => {
-                if self.server_edit.field != ServerField::UseTls {
+                if !matches!(
+                    self.server_edit.field,
+                    ServerField::UseTls | ServerField::UseExactClientId
+                ) {
                     self.server_edit_insert(c);
                 }
             }
@@ -1170,8 +1552,9 @@ impl App {
             ServerField::Name => &mut self.server_edit.name,
             ServerField::Host => &mut self.server_edit.host,
             ServerField::Port => &mut self.server_edit.port,
-            ServerField::UseTls => &mut self.server_edit.host,
+            ServerField::UseTls => &mut self.server_edit.host, // dummy, not used for checkbox
             ServerField::ClientId => &mut self.server_edit.client_id,
+            ServerField::UseExactClientId => &mut self.server_edit.host, // dummy, not used for checkbox
             ServerField::Username => &mut self.server_edit.username,
             ServerField::Token => &mut self.server_edit.token,
             ServerField::SubscribeTopic => &mut self.server_edit.subscribe_topic,
@@ -1229,6 +1612,13 @@ impl App {
                 }
             }
             ServerField::ClientId => self.server_edit.client_id.clone(),
+            ServerField::UseExactClientId => {
+                if self.server_edit.use_exact_client_id {
+                    "on".to_string()
+                } else {
+                    "off".to_string()
+                }
+            }
             ServerField::Username => self.server_edit.username.clone(),
             ServerField::Token => {
                 if self.server_edit.token.is_empty() {
@@ -1280,6 +1670,7 @@ impl App {
             port,
             use_tls: self.server_edit.use_tls,
             client_id: self.server_edit.client_id.trim().to_string(),
+            use_exact_client_id: self.server_edit.use_exact_client_id,
             username: if self.server_edit.username.trim().is_empty() {
                 None
             } else {
@@ -1298,8 +1689,14 @@ impl App {
             keep_alive_secs,
         };
 
-        if server.name.is_empty() || server.host.is_empty() || server.client_id.is_empty() {
-            return Err(anyhow!("Name, host, and client ID are required"));
+        // Name and host are required. Client ID is optional (auto-generated if empty)
+        if server.name.is_empty() || server.host.is_empty() {
+            return Err(anyhow!("Name and host are required"));
+        }
+
+        // If exact client_id is enabled, it must be provided
+        if server.use_exact_client_id && server.client_id.is_empty() {
+            return Err(anyhow!("Client ID required when 'Exact ID' is enabled"));
         }
 
         if self
@@ -1399,6 +1796,429 @@ impl App {
             ConnectionState::Reconnecting => Color::Yellow,
         }
     }
+
+    /// Open bookmark manager
+    pub fn open_bookmark_manager(&mut self) {
+        self.input_mode = InputMode::BookmarkManager;
+        self.bookmark_manager.selected_index = 0;
+        self.bookmark_manager.editing = None;
+        self.set_status("Bookmarks");
+    }
+
+    /// Handle bookmark manager input
+    pub fn handle_bookmark_manager_input(&mut self, code: KeyCode, modifiers: KeyModifiers) {
+        // If editing a bookmark, handle edit input
+        if self.bookmark_manager.editing.is_some() {
+            self.handle_bookmark_edit_input(code, modifiers);
+            return;
+        }
+
+        match code {
+            KeyCode::Esc => {
+                self.input_mode = InputMode::Normal;
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                let count = self.user_data.bookmarks.len();
+                if count > 0 && self.bookmark_manager.selected_index < count - 1 {
+                    self.bookmark_manager.selected_index += 1;
+                }
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if self.bookmark_manager.selected_index > 0 {
+                    self.bookmark_manager.selected_index -= 1;
+                }
+            }
+            KeyCode::Enter => {
+                // Quick publish selected bookmark
+                if let Some(bookmark) = self
+                    .user_data
+                    .bookmarks
+                    .get(self.bookmark_manager.selected_index)
+                {
+                    self.pending_publish = Some(PendingPublish {
+                        topic: bookmark.topic.clone(),
+                        payload: bookmark.payload.as_bytes().to_vec(),
+                        qos: bookmark.qos,
+                        retain: bookmark.retain,
+                    });
+                    self.set_status(&format!("Publishing to {}", bookmark.topic));
+                }
+            }
+            KeyCode::Char('a') => {
+                // Add new bookmark
+                self.start_bookmark_edit(None);
+            }
+            KeyCode::Char('e') => {
+                // Edit selected bookmark
+                if !self.user_data.bookmarks.is_empty() {
+                    let index = self
+                        .bookmark_manager
+                        .selected_index
+                        .min(self.user_data.bookmarks.len() - 1);
+                    self.start_bookmark_edit(Some(index));
+                }
+            }
+            KeyCode::Char('d') => {
+                // Delete selected bookmark
+                if !self.user_data.bookmarks.is_empty() {
+                    let index = self.bookmark_manager.selected_index;
+                    if index < self.user_data.bookmarks.len() {
+                        self.user_data.remove_bookmark(index);
+                        self.save_user_data();
+                        // Adjust selection if needed
+                        if self.bookmark_manager.selected_index > 0
+                            && self.bookmark_manager.selected_index
+                                >= self.user_data.bookmarks.len()
+                        {
+                            self.bookmark_manager.selected_index =
+                                self.user_data.bookmarks.len().saturating_sub(1);
+                        }
+                        self.set_status("Bookmark deleted");
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn start_bookmark_edit(&mut self, index: Option<usize>) {
+        let edit_state = if let Some(idx) = index {
+            if let Some(bookmark) = self.user_data.bookmarks.get(idx) {
+                BookmarkEditState {
+                    is_new: false,
+                    index: idx,
+                    field: BookmarkField::Name,
+                    cursor: bookmark.name.len(),
+                    name: bookmark.name.clone(),
+                    topic: bookmark.topic.clone(),
+                    payload: bookmark.payload.clone(),
+                    qos: bookmark.qos,
+                    retain: bookmark.retain,
+                    category: bookmark.category.clone().unwrap_or_default(),
+                }
+            } else {
+                return;
+            }
+        } else {
+            // New bookmark - pre-fill with current selected topic if available
+            BookmarkEditState {
+                is_new: true,
+                index: self.user_data.bookmarks.len(),
+                field: BookmarkField::Name,
+                cursor: 0,
+                name: String::new(),
+                topic: self.selected_topic.clone().unwrap_or_default(),
+                payload: String::new(),
+                qos: 0,
+                retain: false,
+                category: String::new(),
+            }
+        };
+        self.bookmark_manager.editing = Some(edit_state);
+    }
+
+    fn handle_bookmark_edit_input(&mut self, code: KeyCode, _modifiers: KeyModifiers) {
+        // Get current field to check conditions
+        let current_field = match &self.bookmark_manager.editing {
+            Some(e) => e.field,
+            None => return,
+        };
+
+        match code {
+            KeyCode::Esc => {
+                self.bookmark_manager.editing = None;
+            }
+            KeyCode::Enter => {
+                // Validate and save
+                let editing = self.bookmark_manager.editing.take().unwrap();
+                if editing.name.trim().is_empty() {
+                    self.set_status("Name cannot be empty");
+                    self.bookmark_manager.editing = Some(editing);
+                    return;
+                }
+                if editing.topic.trim().is_empty() {
+                    self.set_status("Topic cannot be empty");
+                    self.bookmark_manager.editing = Some(editing);
+                    return;
+                }
+
+                let bookmark = Bookmark {
+                    name: editing.name.trim().to_string(),
+                    topic: editing.topic.trim().to_string(),
+                    payload: editing.payload.clone(),
+                    qos: editing.qos,
+                    retain: editing.retain,
+                    category: if editing.category.trim().is_empty() {
+                        None
+                    } else {
+                        Some(editing.category.trim().to_string())
+                    },
+                };
+
+                if editing.is_new {
+                    self.user_data.add_bookmark(bookmark);
+                    self.bookmark_manager.selected_index =
+                        self.user_data.bookmarks.len().saturating_sub(1);
+                    self.set_status("Bookmark added");
+                } else {
+                    self.user_data.update_bookmark(editing.index, bookmark);
+                    self.set_status("Bookmark updated");
+                }
+                self.save_user_data();
+            }
+            KeyCode::Tab => {
+                let next_field = next_bookmark_field(current_field);
+                if let Some(editing) = &mut self.bookmark_manager.editing {
+                    editing.field = next_field;
+                    editing.cursor = bookmark_field_len(editing);
+                }
+            }
+            KeyCode::BackTab => {
+                let prev_field = prev_bookmark_field(current_field);
+                if let Some(editing) = &mut self.bookmark_manager.editing {
+                    editing.field = prev_field;
+                    editing.cursor = bookmark_field_len(editing);
+                }
+            }
+            KeyCode::Left => {
+                if let Some(editing) = &mut self.bookmark_manager.editing {
+                    if editing.cursor > 0 {
+                        editing.cursor -= 1;
+                    }
+                }
+            }
+            KeyCode::Right => {
+                if let Some(editing) = &mut self.bookmark_manager.editing {
+                    let max = bookmark_field_len(editing);
+                    if editing.cursor < max {
+                        editing.cursor += 1;
+                    }
+                }
+            }
+            KeyCode::Home => {
+                if let Some(editing) = &mut self.bookmark_manager.editing {
+                    editing.cursor = 0;
+                }
+            }
+            KeyCode::End => {
+                if let Some(editing) = &mut self.bookmark_manager.editing {
+                    editing.cursor = bookmark_field_len(editing);
+                }
+            }
+            // QoS field: 0, 1, 2 to set directly, space to cycle
+            KeyCode::Char('0') if current_field == BookmarkField::Qos => {
+                if let Some(editing) = &mut self.bookmark_manager.editing {
+                    editing.qos = 0;
+                }
+            }
+            KeyCode::Char('1') if current_field == BookmarkField::Qos => {
+                if let Some(editing) = &mut self.bookmark_manager.editing {
+                    editing.qos = 1;
+                }
+            }
+            KeyCode::Char('2') if current_field == BookmarkField::Qos => {
+                if let Some(editing) = &mut self.bookmark_manager.editing {
+                    editing.qos = 2;
+                }
+            }
+            KeyCode::Char(' ') if current_field == BookmarkField::Qos => {
+                if let Some(editing) = &mut self.bookmark_manager.editing {
+                    editing.qos = (editing.qos + 1) % 3;
+                }
+            }
+            // Retain field: space to toggle
+            KeyCode::Char(' ') if current_field == BookmarkField::Retain => {
+                if let Some(editing) = &mut self.bookmark_manager.editing {
+                    editing.retain = !editing.retain;
+                }
+            }
+            KeyCode::Backspace => {
+                if matches!(
+                    current_field,
+                    BookmarkField::Name
+                        | BookmarkField::Category
+                        | BookmarkField::Topic
+                        | BookmarkField::Payload
+                ) {
+                    self.bookmark_edit_backspace();
+                }
+            }
+            KeyCode::Delete => {
+                if matches!(
+                    current_field,
+                    BookmarkField::Name
+                        | BookmarkField::Category
+                        | BookmarkField::Topic
+                        | BookmarkField::Payload
+                ) {
+                    self.bookmark_edit_delete();
+                }
+            }
+            KeyCode::Char(c) => {
+                if matches!(
+                    current_field,
+                    BookmarkField::Name
+                        | BookmarkField::Category
+                        | BookmarkField::Topic
+                        | BookmarkField::Payload
+                ) {
+                    self.bookmark_edit_insert(c);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn bookmark_edit_field_len(&self, editing: &BookmarkEditState) -> usize {
+        match editing.field {
+            BookmarkField::Name => editing.name.len(),
+            BookmarkField::Category => editing.category.len(),
+            BookmarkField::Topic => editing.topic.len(),
+            BookmarkField::Payload => editing.payload.len(),
+            BookmarkField::Qos | BookmarkField::Retain => 0,
+        }
+    }
+
+    fn bookmark_edit_mut_field(&mut self) -> Option<&mut String> {
+        let editing = self.bookmark_manager.editing.as_mut()?;
+        Some(match editing.field {
+            BookmarkField::Name => &mut editing.name,
+            BookmarkField::Category => &mut editing.category,
+            BookmarkField::Topic => &mut editing.topic,
+            BookmarkField::Payload => &mut editing.payload,
+            BookmarkField::Qos | BookmarkField::Retain => return None,
+        })
+    }
+
+    fn bookmark_edit_insert(&mut self, ch: char) {
+        let cursor = self
+            .bookmark_manager
+            .editing
+            .as_ref()
+            .map(|e| e.cursor)
+            .unwrap_or(0);
+        if let Some(value) = self.bookmark_edit_mut_field() {
+            let cursor = cursor.min(value.len());
+            value.insert(cursor, ch);
+        }
+        if let Some(editing) = &mut self.bookmark_manager.editing {
+            editing.cursor = editing.cursor.saturating_add(1);
+        }
+    }
+
+    fn bookmark_edit_backspace(&mut self) {
+        let cursor = self
+            .bookmark_manager
+            .editing
+            .as_ref()
+            .map(|e| e.cursor)
+            .unwrap_or(0);
+        if cursor == 0 {
+            return;
+        }
+        if let Some(value) = self.bookmark_edit_mut_field() {
+            if !value.is_empty() && cursor <= value.len() {
+                value.remove(cursor.saturating_sub(1));
+            }
+        }
+        if let Some(editing) = &mut self.bookmark_manager.editing {
+            editing.cursor = editing.cursor.saturating_sub(1);
+        }
+    }
+
+    fn bookmark_edit_delete(&mut self) {
+        let cursor = self
+            .bookmark_manager
+            .editing
+            .as_ref()
+            .map(|e| e.cursor)
+            .unwrap_or(0);
+        if let Some(value) = self.bookmark_edit_mut_field() {
+            if cursor < value.len() {
+                value.remove(cursor);
+            }
+        }
+    }
+
+    pub fn bookmark_edit_field_value(&self, field: BookmarkField) -> String {
+        if let Some(editing) = &self.bookmark_manager.editing {
+            match field {
+                BookmarkField::Name => editing.name.clone(),
+                BookmarkField::Category => editing.category.clone(),
+                BookmarkField::Topic => editing.topic.clone(),
+                BookmarkField::Payload => editing.payload.clone(),
+                BookmarkField::Qos => editing.qos.to_string(),
+                BookmarkField::Retain => if editing.retain { "on" } else { "off" }.to_string(),
+            }
+        } else {
+            String::new()
+        }
+    }
+
+    /// Save current publish dialog as a bookmark
+    pub fn save_publish_as_bookmark(&mut self) {
+        if self.publish_edit.topic.trim().is_empty() {
+            self.set_status("Cannot save: topic is empty");
+            return;
+        }
+
+        // Create a name from the topic
+        let name = if self.publish_edit.topic.len() > 20 {
+            format!("{}...", &self.publish_edit.topic[..20])
+        } else {
+            self.publish_edit.topic.clone()
+        };
+
+        // Start bookmark edit with pre-filled values
+        let edit_state = BookmarkEditState {
+            is_new: true,
+            index: self.user_data.bookmarks.len(),
+            field: BookmarkField::Name,
+            cursor: name.len(),
+            name,
+            topic: self.publish_edit.topic.clone(),
+            payload: self.publish_edit.payload.clone(),
+            qos: self.publish_edit.qos,
+            retain: self.publish_edit.retain,
+            category: String::new(),
+        };
+
+        // Switch to bookmark manager with edit mode
+        self.input_mode = InputMode::BookmarkManager;
+        self.bookmark_manager.editing = Some(edit_state);
+        self.set_status("Save as bookmark");
+    }
+}
+
+/// Get the length of the current field value in a bookmark edit state
+fn bookmark_field_len(editing: &BookmarkEditState) -> usize {
+    match editing.field {
+        BookmarkField::Name => editing.name.len(),
+        BookmarkField::Category => editing.category.len(),
+        BookmarkField::Topic => editing.topic.len(),
+        BookmarkField::Payload => editing.payload.len(),
+        BookmarkField::Qos | BookmarkField::Retain => 0,
+    }
+}
+
+/// Get the next bookmark field in tab order
+fn next_bookmark_field(field: BookmarkField) -> BookmarkField {
+    let idx = BookmarkField::ALL
+        .iter()
+        .position(|f| *f == field)
+        .unwrap_or(0);
+    let next = (idx + 1) % BookmarkField::ALL.len();
+    BookmarkField::ALL[next]
+}
+
+/// Get the previous bookmark field in tab order
+fn prev_bookmark_field(field: BookmarkField) -> BookmarkField {
+    let idx = BookmarkField::ALL
+        .iter()
+        .position(|f| *f == field)
+        .unwrap_or(0);
+    let prev = idx.checked_sub(1).unwrap_or(BookmarkField::ALL.len() - 1);
+    BookmarkField::ALL[prev]
 }
 
 /// Create a wildcard pattern from a specific topic

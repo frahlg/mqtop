@@ -101,6 +101,22 @@ pub fn render_help(frame: &mut Frame) {
             Span::raw("Track metric from current message"),
         ]),
         Line::from(vec![
+            Span::styled("  P           ", Style::default().fg(Color::Yellow)),
+            Span::raw("Open publish dialog"),
+        ]),
+        Line::from(vec![
+            Span::styled("  Ctrl+P      ", Style::default().fg(Color::Yellow)),
+            Span::raw("Copy message to publish dialog"),
+        ]),
+        Line::from(vec![
+            Span::styled("  Ctrl+S      ", Style::default().fg(Color::Yellow)),
+            Span::raw("Save publish as bookmark (in publish dialog)"),
+        ]),
+        Line::from(vec![
+            Span::styled("  B           ", Style::default().fg(Color::Yellow)),
+            Span::raw("Open bookmark manager"),
+        ]),
+        Line::from(vec![
             Span::styled("  y           ", Style::default().fg(Color::Yellow)),
             Span::raw("Copy topic to clipboard"),
         ]),
