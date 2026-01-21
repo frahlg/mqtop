@@ -2,7 +2,9 @@
 
 use anyhow::{Context, Result};
 use rumqttc::tokio_rustls::rustls::{self, ClientConfig, RootCertStore};
-use rumqttc::{AsyncClient, Event, LastWill, MqttOptions, Packet, QoS, TlsConfiguration, Transport};
+use rumqttc::{
+    AsyncClient, Event, LastWill, MqttOptions, Packet, QoS, TlsConfiguration, Transport,
+};
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -130,7 +132,10 @@ impl MqttClient {
                                     .send(MqttEvent::StateChange(ConnectionState::Connected));
 
                                 // Subscribe after connection is established
-                                info!("Subscribing to: {} with QoS {:?}", subscribe_topic, subscribe_qos);
+                                info!(
+                                    "Subscribing to: {} with QoS {:?}",
+                                    subscribe_topic, subscribe_qos
+                                );
                                 if let Err(e) = client_clone
                                     .subscribe(&subscribe_topic, subscribe_qos)
                                     .await
@@ -281,10 +286,12 @@ impl MqttClient {
             let ca_file = std::fs::File::open(ca_path)
                 .with_context(|| format!("Failed to open CA certificate: {}", ca_path))?;
             let mut reader = BufReader::new(ca_file);
-            let ca_certs = certs(&mut reader).collect::<Result<Vec<_>, _>>()
+            let ca_certs = certs(&mut reader)
+                .collect::<Result<Vec<_>, _>>()
                 .with_context(|| format!("Failed to parse CA certificate: {}", ca_path))?;
             for cert in ca_certs {
-                root_store.add(cert)
+                root_store
+                    .add(cert)
                     .with_context(|| "Failed to add CA certificate to store")?;
             }
             info!("Loaded custom CA certificate from: {}", ca_path);
@@ -300,12 +307,15 @@ impl MqttClient {
         // Build client config
         let builder = ClientConfig::builder().with_root_certificates(root_store);
 
-        let client_config = if let (Some(cert_path), Some(key_path)) = (&config.client_cert, &config.client_key) {
+        let client_config = if let (Some(cert_path), Some(key_path)) =
+            (&config.client_cert, &config.client_key)
+        {
             // Load client certificate for mTLS
             let cert_file = std::fs::File::open(cert_path)
                 .with_context(|| format!("Failed to open client certificate: {}", cert_path))?;
             let mut cert_reader = BufReader::new(cert_file);
-            let client_certs = certs(&mut cert_reader).collect::<Result<Vec<_>, _>>()
+            let client_certs = certs(&mut cert_reader)
+                .collect::<Result<Vec<_>, _>>()
                 .with_context(|| format!("Failed to parse client certificate: {}", cert_path))?;
 
             let key_file = std::fs::File::open(key_path)
@@ -316,7 +326,8 @@ impl MqttClient {
                 .ok_or_else(|| anyhow::anyhow!("No private key found in: {}", key_path))?;
 
             info!("Loaded client certificate for mTLS from: {}", cert_path);
-            builder.with_client_auth_cert(client_certs, client_key)
+            builder
+                .with_client_auth_cert(client_certs, client_key)
                 .context("Failed to configure client authentication")?
         } else {
             builder.with_no_client_auth()
@@ -336,7 +347,9 @@ impl MqttClient {
             client_config
         };
 
-        Ok(Transport::tls_with_config(TlsConfiguration::Rustls(Arc::new(client_config))))
+        Ok(Transport::tls_with_config(TlsConfiguration::Rustls(
+            Arc::new(client_config),
+        )))
     }
 
     /// Generate a client_id for MQTT connection

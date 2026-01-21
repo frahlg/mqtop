@@ -368,7 +368,10 @@ impl Config {
             // client_id is required only when use_exact_client_id is true (no suffix)
             // otherwise it will be auto-generated with timestamp suffix
             if server.use_exact_client_id && server.client_id.trim().is_empty() {
-                bail!("MQTT client_id cannot be empty when ID Suffix is 'none' (server: {})", server.name);
+                bail!(
+                    "MQTT client_id cannot be empty when ID Suffix is 'none' (server: {})",
+                    server.name
+                );
             }
         }
         Ok(())

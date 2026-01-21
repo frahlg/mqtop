@@ -1824,13 +1824,7 @@ impl App {
             .parse()
             .unwrap_or(1)
             .min(2); // Clamp to 0-2
-        let lwt_qos: u8 = self
-            .server_edit
-            .lwt_qos
-            .trim()
-            .parse()
-            .unwrap_or(0)
-            .min(2);
+        let lwt_qos: u8 = self.server_edit.lwt_qos.trim().parse().unwrap_or(0).min(2);
 
         let server = MqttServerConfig {
             name: self.server_edit.name.trim().to_string(),

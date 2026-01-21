@@ -170,10 +170,7 @@ fn render_server_edit(frame: &mut Frame, app: &App, area: Rect) {
             } else {
                 // Show placeholder for empty Client ID when not active
                 if *field == ServerField::ClientId && value.is_empty() {
-                    spans.push(Span::styled(
-                        "(auto)",
-                        Style::default().fg(Color::DarkGray),
-                    ));
+                    spans.push(Span::styled("(auto)", Style::default().fg(Color::DarkGray)));
                 } else {
                     spans.push(Span::styled(value, style));
                 }
