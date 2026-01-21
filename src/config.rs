@@ -104,6 +104,15 @@ pub struct MqttServerConfig {
     pub port: u16,
     #[serde(default)]
     pub use_tls: bool,
+    /// Path to custom CA certificate (PEM format)
+    pub ca_cert: Option<String>,
+    /// Path to client certificate for mTLS (PEM format)
+    pub client_cert: Option<String>,
+    /// Path to client private key for mTLS (PEM format)
+    pub client_key: Option<String>,
+    /// Skip TLS certificate verification (insecure, for testing only)
+    #[serde(default)]
+    pub tls_insecure: bool,
     pub client_id: String,
     /// If true, use client_id exactly as specified (no auto-generated suffix)
     /// If false and client_id is empty, generates "mqtop-{timestamp}"
@@ -116,8 +125,27 @@ pub struct MqttServerConfig {
     pub token: Option<String>,
     #[serde(default = "default_subscribe_topic")]
     pub subscribe_topic: String,
+    /// QoS level for subscriptions (0, 1, or 2)
+    #[serde(default = "default_qos")]
+    pub subscribe_qos: u8,
     #[serde(default = "default_keep_alive")]
     pub keep_alive_secs: u64,
+    /// MQTT protocol version (3 = 3.1.1, 5 = 5.0)
+    #[serde(default = "default_mqtt_version")]
+    pub mqtt_version: u8,
+    /// Clean session - if true, broker discards previous session state
+    #[serde(default = "default_clean_session")]
+    pub clean_session: bool,
+    /// Last Will and Testament topic (optional)
+    pub lwt_topic: Option<String>,
+    /// Last Will and Testament payload (optional)
+    pub lwt_payload: Option<String>,
+    /// Last Will QoS (0, 1, or 2)
+    #[serde(default)]
+    pub lwt_qos: u8,
+    /// Last Will retain flag
+    #[serde(default)]
+    pub lwt_retain: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,6 +186,18 @@ fn default_subscribe_topic() -> String {
 
 fn default_keep_alive() -> u64 {
     30
+}
+
+fn default_qos() -> u8 {
+    1
+}
+
+fn default_mqtt_version() -> u8 {
+    3 // 3 = MQTT 3.1.1, 5 = MQTT 5.0
+}
+
+fn default_clean_session() -> bool {
+    true
 }
 
 fn default_message_buffer_size() -> usize {
@@ -325,10 +365,10 @@ impl Config {
             if !names.insert(server.name.clone()) {
                 bail!("Duplicate MQTT server name: {}", server.name);
             }
-            // client_id is required only when use_exact_client_id is true
-            // otherwise it will be auto-generated
+            // client_id is required only when use_exact_client_id is true (no suffix)
+            // otherwise it will be auto-generated with timestamp suffix
             if server.use_exact_client_id && server.client_id.trim().is_empty() {
-                bail!("MQTT client_id cannot be empty when use_exact_client_id is enabled (server: {})", server.name);
+                bail!("MQTT client_id cannot be empty when ID Suffix is 'none' (server: {})", server.name);
             }
         }
         Ok(())

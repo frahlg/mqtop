@@ -122,6 +122,10 @@ fn run_config_wizard(config_path: &PathBuf) -> Result<Config> {
         host: host.trim().to_string(),
         port,
         use_tls,
+        ca_cert: None,
+        client_cert: None,
+        client_key: None,
+        tls_insecure: false,
         client_id: client_id.trim().to_string(),
         use_exact_client_id: false, // Default to auto-suffix for reconnect safety
         username: if username.trim().is_empty() {
@@ -139,7 +143,14 @@ fn run_config_wizard(config_path: &PathBuf) -> Result<Config> {
         } else {
             subscribe_topic.trim().to_string()
         },
+        subscribe_qos: 1,
         keep_alive_secs,
+        mqtt_version: 3,
+        clean_session: true,
+        lwt_topic: None,
+        lwt_payload: None,
+        lwt_qos: 0,
+        lwt_retain: false,
     };
 
     let config = Config {

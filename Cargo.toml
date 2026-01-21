@@ -1,6 +1,6 @@
 [package]
 name = "mqtop"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 description = "High-performance MQTT explorer TUI - like htop for your broker"
 authors = ["Sourceful Energy"]
@@ -44,8 +44,9 @@ dirs = "5"
 # Clipboard
 arboard = "3"
 
-# TLS support
-rustls = "0.23"
+# TLS support (match rumqttc's versions)
+rustls-pemfile = "2"
+rustls-native-certs = "0.7"
 
 [dev-dependencies]
 # Testing

@@ -133,30 +133,64 @@ pub struct ServerEditState {
     pub index: usize,
     pub field: ServerField,
     pub cursor: usize,
+    // Basic connection
     pub name: String,
     pub host: String,
     pub port: String,
+    // TLS settings
     pub use_tls: bool,
+    pub ca_cert: String,
+    pub client_cert: String,
+    pub client_key: String,
+    pub tls_insecure: bool,
+    // Client ID
     pub client_id: String,
     pub use_exact_client_id: bool,
+    // Authentication
     pub username: String,
     pub token: String,
+    // Subscription
     pub subscribe_topic: String,
+    pub subscribe_qos: String,
     pub keep_alive_secs: String,
+    // Session
+    pub clean_session: bool,
+    // Last Will
+    pub lwt_topic: String,
+    pub lwt_payload: String,
+    pub lwt_qos: String,
+    pub lwt_retain: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServerField {
+    // Basic connection
     Name,
     Host,
     Port,
+    // TLS
     UseTls,
+    CaCert,
+    ClientCert,
+    ClientKey,
+    TlsInsecure,
+    // Client ID
     ClientId,
     UseExactClientId,
+    // Auth
     Username,
     Token,
+    // Subscription
     SubscribeTopic,
+    SubscribeQos,
     KeepAlive,
+    // Session
+    CleanSession,
+    // LWT
+    LwtTopic,
+    LwtPayload,
+    LwtQos,
+    LwtRetain,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -179,12 +213,22 @@ impl Default for ServerEditState {
             host: String::new(),
             port: String::new(),
             use_tls: false,
+            ca_cert: String::new(),
+            client_cert: String::new(),
+            client_key: String::new(),
+            tls_insecure: false,
             client_id: String::new(),
             use_exact_client_id: false,
             username: String::new(),
             token: String::new(),
             subscribe_topic: String::new(),
+            subscribe_qos: String::new(),
             keep_alive_secs: String::new(),
+            clean_session: true,
+            lwt_topic: String::new(),
+            lwt_payload: String::new(),
+            lwt_qos: String::new(),
+            lwt_retain: false,
         }
     }
 }
@@ -324,17 +368,34 @@ impl BookmarkField {
 }
 
 impl ServerField {
-    pub const ALL: [ServerField; 10] = [
+    pub const ALL: [ServerField; 20] = [
+        // Basic
         ServerField::Name,
         ServerField::Host,
         ServerField::Port,
+        // TLS
         ServerField::UseTls,
+        ServerField::CaCert,
+        ServerField::ClientCert,
+        ServerField::ClientKey,
+        ServerField::TlsInsecure,
+        // Client ID
         ServerField::ClientId,
         ServerField::UseExactClientId,
+        // Auth
         ServerField::Username,
         ServerField::Token,
+        // Subscription
         ServerField::SubscribeTopic,
+        ServerField::SubscribeQos,
         ServerField::KeepAlive,
+        // Session
+        ServerField::CleanSession,
+        // LWT
+        ServerField::LwtTopic,
+        ServerField::LwtPayload,
+        ServerField::LwtQos,
+        ServerField::LwtRetain,
     ];
 
     pub fn label(&self) -> &'static str {
@@ -343,13 +404,34 @@ impl ServerField {
             ServerField::Host => "Host",
             ServerField::Port => "Port",
             ServerField::UseTls => "TLS",
+            ServerField::CaCert => "CA Cert",
+            ServerField::ClientCert => "Client Cert",
+            ServerField::ClientKey => "Client Key",
+            ServerField::TlsInsecure => "TLS Insecure",
             ServerField::ClientId => "Client ID",
-            ServerField::UseExactClientId => "Exact ID",
+            ServerField::UseExactClientId => "ID Suffix",
             ServerField::Username => "Username",
             ServerField::Token => "Token",
             ServerField::SubscribeTopic => "Subscribe",
+            ServerField::SubscribeQos => "Sub QoS",
             ServerField::KeepAlive => "Keep Alive",
+            ServerField::CleanSession => "Clean Sess",
+            ServerField::LwtTopic => "LWT Topic",
+            ServerField::LwtPayload => "LWT Payload",
+            ServerField::LwtQos => "LWT QoS",
+            ServerField::LwtRetain => "LWT Retain",
         }
+    }
+
+    pub fn is_checkbox(&self) -> bool {
+        matches!(
+            self,
+            ServerField::UseTls
+                | ServerField::TlsInsecure
+                | ServerField::UseExactClientId
+                | ServerField::CleanSession
+                | ServerField::LwtRetain
+        )
     }
 }
 
@@ -1445,29 +1527,63 @@ impl App {
         if let Some(index) = index {
             let server = &self.config.mqtt.servers[index];
             self.server_edit.index = index;
+            // Basic
             self.server_edit.name = server.name.clone();
             self.server_edit.host = server.host.clone();
             self.server_edit.port = server.port.to_string();
+            // TLS
             self.server_edit.use_tls = server.use_tls;
+            self.server_edit.ca_cert = server.ca_cert.clone().unwrap_or_default();
+            self.server_edit.client_cert = server.client_cert.clone().unwrap_or_default();
+            self.server_edit.client_key = server.client_key.clone().unwrap_or_default();
+            self.server_edit.tls_insecure = server.tls_insecure;
+            // Client ID
             self.server_edit.client_id = server.client_id.clone();
             self.server_edit.use_exact_client_id = server.use_exact_client_id;
+            // Auth
             self.server_edit.username = server.username.clone().unwrap_or_default();
             self.server_edit.token = server.token.clone().unwrap_or_default();
+            // Subscription
             self.server_edit.subscribe_topic = server.subscribe_topic.clone();
+            self.server_edit.subscribe_qos = server.subscribe_qos.to_string();
             self.server_edit.keep_alive_secs = server.keep_alive_secs.to_string();
+            // Session
+            self.server_edit.clean_session = server.clean_session;
+            // LWT
+            self.server_edit.lwt_topic = server.lwt_topic.clone().unwrap_or_default();
+            self.server_edit.lwt_payload = server.lwt_payload.clone().unwrap_or_default();
+            self.server_edit.lwt_qos = server.lwt_qos.to_string();
+            self.server_edit.lwt_retain = server.lwt_retain;
             self.server_edit.cursor = self.server_edit_field_value(self.server_edit.field).len();
         } else {
             self.server_edit.index = self.config.mqtt.servers.len();
+            // Basic
             self.server_edit.name.clear();
             self.server_edit.host.clear();
             self.server_edit.port = "1883".to_string();
+            // TLS
             self.server_edit.use_tls = false;
+            self.server_edit.ca_cert.clear();
+            self.server_edit.client_cert.clear();
+            self.server_edit.client_key.clear();
+            self.server_edit.tls_insecure = false;
+            // Client ID
             self.server_edit.client_id.clear();
             self.server_edit.use_exact_client_id = false;
+            // Auth
             self.server_edit.username.clear();
             self.server_edit.token.clear();
+            // Subscription
             self.server_edit.subscribe_topic = "#".to_string();
+            self.server_edit.subscribe_qos = "1".to_string();
             self.server_edit.keep_alive_secs = "30".to_string();
+            // Session
+            self.server_edit.clean_session = true;
+            // LWT
+            self.server_edit.lwt_topic.clear();
+            self.server_edit.lwt_payload.clear();
+            self.server_edit.lwt_qos = "0".to_string();
+            self.server_edit.lwt_retain = false;
             self.server_edit.cursor = self.server_edit_field_value(self.server_edit.field).len();
         }
     }
@@ -1516,30 +1632,30 @@ impl App {
             KeyCode::Char(' ') if self.server_edit.field == ServerField::UseTls => {
                 self.server_edit.use_tls = !self.server_edit.use_tls;
             }
+            KeyCode::Char(' ') if self.server_edit.field == ServerField::TlsInsecure => {
+                self.server_edit.tls_insecure = !self.server_edit.tls_insecure;
+            }
             KeyCode::Char(' ') if self.server_edit.field == ServerField::UseExactClientId => {
                 self.server_edit.use_exact_client_id = !self.server_edit.use_exact_client_id;
             }
+            KeyCode::Char(' ') if self.server_edit.field == ServerField::CleanSession => {
+                self.server_edit.clean_session = !self.server_edit.clean_session;
+            }
+            KeyCode::Char(' ') if self.server_edit.field == ServerField::LwtRetain => {
+                self.server_edit.lwt_retain = !self.server_edit.lwt_retain;
+            }
             KeyCode::Backspace => {
-                if !matches!(
-                    self.server_edit.field,
-                    ServerField::UseTls | ServerField::UseExactClientId
-                ) {
+                if !self.server_edit.field.is_checkbox() {
                     self.server_edit_backspace();
                 }
             }
             KeyCode::Delete => {
-                if !matches!(
-                    self.server_edit.field,
-                    ServerField::UseTls | ServerField::UseExactClientId
-                ) {
+                if !self.server_edit.field.is_checkbox() {
                     self.server_edit_delete();
                 }
             }
             KeyCode::Char(c) => {
-                if !matches!(
-                    self.server_edit.field,
-                    ServerField::UseTls | ServerField::UseExactClientId
-                ) {
+                if !self.server_edit.field.is_checkbox() {
                     self.server_edit_insert(c);
                 }
             }
@@ -1553,12 +1669,22 @@ impl App {
             ServerField::Host => &mut self.server_edit.host,
             ServerField::Port => &mut self.server_edit.port,
             ServerField::UseTls => &mut self.server_edit.host, // dummy, not used for checkbox
+            ServerField::CaCert => &mut self.server_edit.ca_cert,
+            ServerField::ClientCert => &mut self.server_edit.client_cert,
+            ServerField::ClientKey => &mut self.server_edit.client_key,
+            ServerField::TlsInsecure => &mut self.server_edit.host, // dummy, not used for checkbox
             ServerField::ClientId => &mut self.server_edit.client_id,
             ServerField::UseExactClientId => &mut self.server_edit.host, // dummy, not used for checkbox
             ServerField::Username => &mut self.server_edit.username,
             ServerField::Token => &mut self.server_edit.token,
             ServerField::SubscribeTopic => &mut self.server_edit.subscribe_topic,
+            ServerField::SubscribeQos => &mut self.server_edit.subscribe_qos,
             ServerField::KeepAlive => &mut self.server_edit.keep_alive_secs,
+            ServerField::CleanSession => &mut self.server_edit.host, // dummy, not used for checkbox
+            ServerField::LwtTopic => &mut self.server_edit.lwt_topic,
+            ServerField::LwtPayload => &mut self.server_edit.lwt_payload,
+            ServerField::LwtQos => &mut self.server_edit.lwt_qos,
+            ServerField::LwtRetain => &mut self.server_edit.host, // dummy, not used for checkbox
         }
     }
 
@@ -1611,12 +1737,22 @@ impl App {
                     "off".to_string()
                 }
             }
+            ServerField::CaCert => self.server_edit.ca_cert.clone(),
+            ServerField::ClientCert => self.server_edit.client_cert.clone(),
+            ServerField::ClientKey => self.server_edit.client_key.clone(),
+            ServerField::TlsInsecure => {
+                if self.server_edit.tls_insecure {
+                    "on (INSECURE!)".to_string()
+                } else {
+                    "off".to_string()
+                }
+            }
             ServerField::ClientId => self.server_edit.client_id.clone(),
             ServerField::UseExactClientId => {
                 if self.server_edit.use_exact_client_id {
-                    "on".to_string()
+                    "none (exact ID)".to_string()
                 } else {
-                    "off".to_string()
+                    "auto (+timestamp)".to_string()
                 }
             }
             ServerField::Username => self.server_edit.username.clone(),
@@ -1628,7 +1764,25 @@ impl App {
                 }
             }
             ServerField::SubscribeTopic => self.server_edit.subscribe_topic.clone(),
+            ServerField::SubscribeQos => self.server_edit.subscribe_qos.clone(),
             ServerField::KeepAlive => self.server_edit.keep_alive_secs.clone(),
+            ServerField::CleanSession => {
+                if self.server_edit.clean_session {
+                    "on".to_string()
+                } else {
+                    "off (persistent)".to_string()
+                }
+            }
+            ServerField::LwtTopic => self.server_edit.lwt_topic.clone(),
+            ServerField::LwtPayload => self.server_edit.lwt_payload.clone(),
+            ServerField::LwtQos => self.server_edit.lwt_qos.clone(),
+            ServerField::LwtRetain => {
+                if self.server_edit.lwt_retain {
+                    "on".to_string()
+                } else {
+                    "off".to_string()
+                }
+            }
         }
     }
 
@@ -1663,12 +1817,42 @@ impl App {
             .trim()
             .parse()
             .context("Keep alive must be a number")?;
+        let subscribe_qos: u8 = self
+            .server_edit
+            .subscribe_qos
+            .trim()
+            .parse()
+            .unwrap_or(1)
+            .min(2); // Clamp to 0-2
+        let lwt_qos: u8 = self
+            .server_edit
+            .lwt_qos
+            .trim()
+            .parse()
+            .unwrap_or(0)
+            .min(2);
 
         let server = MqttServerConfig {
             name: self.server_edit.name.trim().to_string(),
             host: self.server_edit.host.trim().to_string(),
             port,
             use_tls: self.server_edit.use_tls,
+            ca_cert: if self.server_edit.ca_cert.trim().is_empty() {
+                None
+            } else {
+                Some(self.server_edit.ca_cert.trim().to_string())
+            },
+            client_cert: if self.server_edit.client_cert.trim().is_empty() {
+                None
+            } else {
+                Some(self.server_edit.client_cert.trim().to_string())
+            },
+            client_key: if self.server_edit.client_key.trim().is_empty() {
+                None
+            } else {
+                Some(self.server_edit.client_key.trim().to_string())
+            },
+            tls_insecure: self.server_edit.tls_insecure,
             client_id: self.server_edit.client_id.trim().to_string(),
             use_exact_client_id: self.server_edit.use_exact_client_id,
             username: if self.server_edit.username.trim().is_empty() {
@@ -1686,7 +1870,22 @@ impl App {
             } else {
                 self.server_edit.subscribe_topic.trim().to_string()
             },
+            subscribe_qos,
             keep_alive_secs,
+            mqtt_version: 3, // MQTT 5.0 not yet implemented
+            clean_session: self.server_edit.clean_session,
+            lwt_topic: if self.server_edit.lwt_topic.trim().is_empty() {
+                None
+            } else {
+                Some(self.server_edit.lwt_topic.trim().to_string())
+            },
+            lwt_payload: if self.server_edit.lwt_payload.trim().is_empty() {
+                None
+            } else {
+                Some(self.server_edit.lwt_payload.trim().to_string())
+            },
+            lwt_qos,
+            lwt_retain: self.server_edit.lwt_retain,
         };
 
         // Name and host are required. Client ID is optional (auto-generated if empty)
@@ -1694,9 +1893,9 @@ impl App {
             return Err(anyhow!("Name and host are required"));
         }
 
-        // If exact client_id is enabled, it must be provided
+        // If exact client_id is enabled (no suffix), it must be provided
         if server.use_exact_client_id && server.client_id.is_empty() {
-            return Err(anyhow!("Client ID required when 'Exact ID' is enabled"));
+            return Err(anyhow!("Client ID required when ID Suffix is 'none'"));
         }
 
         if self

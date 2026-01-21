@@ -149,7 +149,7 @@ fn render_server_edit(frame: &mut Frame, app: &App, area: Rect) {
                 format!("{:>12}: ", label),
                 Style::default().fg(Color::DarkGray),
             )];
-            if is_active && *field != ServerField::UseTls {
+            if is_active && !field.is_checkbox() {
                 let cursor = app.server_edit.cursor.min(value.len());
                 let (head, tail) = value.split_at(cursor);
                 spans.push(Span::styled(head.to_string(), style));
@@ -160,9 +160,24 @@ fn render_server_edit(frame: &mut Frame, app: &App, area: Rect) {
                         .add_modifier(Modifier::SLOW_BLINK),
                 ));
                 spans.push(Span::styled(tail.to_string(), style));
+                // Show placeholder hint for empty Client ID
+                if *field == ServerField::ClientId && value.is_empty() {
+                    spans.push(Span::styled(
+                        "(auto: mqtop-timestamp)",
+                        Style::default().fg(Color::DarkGray),
+                    ));
+                }
             } else {
-                spans.push(Span::styled(value, style));
-                if is_active && *field == ServerField::UseTls {
+                // Show placeholder for empty Client ID when not active
+                if *field == ServerField::ClientId && value.is_empty() {
+                    spans.push(Span::styled(
+                        "(auto)",
+                        Style::default().fg(Color::DarkGray),
+                    ));
+                } else {
+                    spans.push(Span::styled(value, style));
+                }
+                if is_active && field.is_checkbox() {
                     spans.push(Span::styled(
                         "▌",
                         Style::default()
@@ -184,7 +199,7 @@ fn render_server_edit(frame: &mut Frame, app: &App, area: Rect) {
         Span::styled("Tab", Style::default().fg(Color::Yellow)),
         Span::raw(" next field  "),
         Span::styled("Space", Style::default().fg(Color::Yellow)),
-        Span::raw(" toggle TLS"),
+        Span::raw(" toggle"),
     ]));
     frame.render_widget(footer, chunks[2]);
 }

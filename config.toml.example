@@ -23,12 +23,30 @@ port = 8883
 use_tls = true
 
 # ============================================================================
+# TLS Certificate Options (Optional)
+# ============================================================================
+
+# Custom CA certificate (PEM format) - for self-signed or private CA
+# ca_cert = "/path/to/ca.pem"
+
+# Client certificate and key for mTLS authentication
+# client_cert = "/path/to/client.pem"
+# client_key = "/path/to/client-key.pem"
+
+# Skip TLS certificate verification (INSECURE - for testing only!)
+# tls_insecure = false
+
+# ============================================================================
 # Authentication
 # ============================================================================
 
 # Client ID - unique identifier for this connection
 # Also used as username if username is not explicitly set
 client_id = "mqtop-explorer"
+
+# If true, use client_id exactly as specified (for persistent sessions/auth)
+# If false (default), a timestamp suffix is added for reconnect safety
+# use_exact_client_id = false
 
 # Username for MQTT authentication
 # If not set, defaults to client_id
@@ -54,9 +72,35 @@ client_id = "mqtop-explorer"
 #   "building/+/floor/#"     - All data from any floor
 subscribe_topic = "#"
 
+# QoS level for subscriptions (0, 1, or 2)
+# 0 = At most once, 1 = At least once (default), 2 = Exactly once
+# subscribe_qos = 1
+
 # Keep-alive interval in seconds
 # Broker will disconnect if no packets received within 1.5x this interval
 keep_alive_secs = 30
+
+# ============================================================================
+# Session Options
+# ============================================================================
+
+# Clean session - if true (default), broker discards previous session state
+# Set to false for persistent subscriptions and queued messages
+# clean_session = true
+
+# MQTT protocol version: 3 = MQTT 3.1.1 (default), 5 = MQTT 5.0
+# Note: MQTT 5.0 support is planned but not yet implemented
+# mqtt_version = 3
+
+# ============================================================================
+# Last Will and Testament (Optional)
+# ============================================================================
+# Message published by broker if client disconnects unexpectedly
+
+# lwt_topic = "clients/mqtop/status"
+# lwt_payload = "offline"
+# lwt_qos = 1
+# lwt_retain = true
 
 [ui]
 # ============================================================================
