@@ -10,7 +10,7 @@ use super::bordered_block;
 use crate::app::{App, Panel, PayloadMode};
 use crate::mqtt::MqttMessage;
 
-pub fn render_messages(frame: &mut Frame, app: &App, area: Rect) {
+pub fn render_messages(frame: &mut Frame, app: &mut App, area: Rect) {
     let focused = app.focused_panel == Panel::Messages;
 
     let title = match &app.selected_topic {
@@ -22,6 +22,28 @@ pub fn render_messages(frame: &mut Frame, app: &App, area: Rect) {
     let inner = block.inner(area);
 
     frame.render_widget(block, area);
+
+    // Split view: message list on top, payload detail below
+    let chunks = ratatui::layout::Layout::default()
+        .direction(ratatui::layout::Direction::Vertical)
+        .constraints([
+            ratatui::layout::Constraint::Percentage(40),
+            ratatui::layout::Constraint::Percentage(60),
+        ])
+        .split(inner);
+
+    // Update message scroll to keep selection visible (before borrowing messages)
+    let message_count = app.get_current_messages().len();
+    if message_count > 0 {
+        let visible_height = chunks[0].height as usize;
+        let selected = app.selected_message_index.min(message_count.saturating_sub(1));
+
+        if selected < app.message_scroll {
+            app.message_scroll = selected;
+        } else if selected >= app.message_scroll + visible_height {
+            app.message_scroll = selected.saturating_sub(visible_height.saturating_sub(1));
+        }
+    }
 
     let messages = app.get_current_messages();
 
@@ -41,15 +63,6 @@ pub fn render_messages(frame: &mut Frame, app: &App, area: Rect) {
         frame.render_widget(text, inner);
         return;
     }
-
-    // Split view: message list on top, payload detail below
-    let chunks = ratatui::layout::Layout::default()
-        .direction(ratatui::layout::Direction::Vertical)
-        .constraints([
-            ratatui::layout::Constraint::Percentage(40),
-            ratatui::layout::Constraint::Percentage(60),
-        ])
-        .split(inner);
 
     // Message list
     render_message_list(frame, app, &messages, chunks[0]);
@@ -72,6 +85,7 @@ fn render_message_list(frame: &mut Frame, app: &App, messages: &[&MqttMessage], 
 
     let mut state = ListState::default();
     state.select(Some(app.selected_message_index));
+    *state.offset_mut() = app.message_scroll;
 
     let list = List::new(items).highlight_style(
         Style::default()

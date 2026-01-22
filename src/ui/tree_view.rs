@@ -11,7 +11,7 @@ use crate::app::{App, FilterMode, Panel};
 use crate::config::TopicColorRule;
 use crate::state::TopicInfo;
 
-pub fn render_tree(frame: &mut Frame, app: &App, area: Rect) {
+pub fn render_tree(frame: &mut Frame, app: &mut App, area: Rect) {
     let focused = app.focused_panel == Panel::TopicTree;
     let title = match app.filter_mode {
         FilterMode::All => "Topics",
@@ -35,6 +35,18 @@ pub fn render_tree(frame: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
+    // Calculate visible window and ensure selection is visible
+    let visible_height = inner.height as usize;
+    let total = topics.len();
+    let selected = app.selected_topic_index.min(total.saturating_sub(1));
+
+    // Ensure scroll keeps selection in view
+    if selected < app.tree_scroll {
+        app.tree_scroll = selected;
+    } else if selected >= app.tree_scroll + visible_height {
+        app.tree_scroll = selected.saturating_sub(visible_height.saturating_sub(1));
+    }
+
     let color_rules = &app.config.ui.topic_colors;
     let items: Vec<ListItem> = topics
         .iter()
@@ -48,6 +60,7 @@ pub fn render_tree(frame: &mut Frame, app: &App, area: Rect) {
 
     let mut state = ListState::default();
     state.select(Some(app.selected_topic_index));
+    *state.offset_mut() = app.tree_scroll;
 
     let list = List::new(items).highlight_style(
         Style::default()
