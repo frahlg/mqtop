@@ -359,7 +359,7 @@ async fn run_app(config: Config, config_path: PathBuf, needs_server_setup: bool)
     // Main loop
     loop {
         // Draw UI
-        terminal.draw(|f| ui::render(f, &app))?;
+        terminal.draw(|f| ui::render(f, &mut app))?;
 
         // Handle events with timeout
         let timeout = tick_rate;

@@ -31,7 +31,7 @@ pub use stats_view::render_stats;
 pub use tree_view::render_tree;
 
 /// Main render function
-pub fn render(frame: &mut Frame, app: &App) {
+pub fn render(frame: &mut Frame, app: &mut App) {
     let size = frame.area();
 
     // Create main layout: header, content, footer
