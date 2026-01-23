@@ -201,13 +201,25 @@ jobs:
           FORMULA
           cat mqtop.rb
 
-      - name: Update Homebrew tap
+      - name: Update Homebrew tap (frahlg/tap)
         uses: dmnemec/copy_file_to_another_repo_action@main
         env:
           API_TOKEN_GITHUB: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         with:
           source_file: 'mqtop.rb'
           destination_repo: 'frahlg/homebrew-tap'
+          destination_folder: 'Formula'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          user_name: 'github-actions[bot]'
+          commit_message: 'Update mqtop to v${{ steps.version.outputs.version }}'
+
+      - name: Update Homebrew tap (frahlg/mqtop)
+        uses: dmnemec/copy_file_to_another_repo_action@main
+        env:
+          API_TOKEN_GITHUB: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        with:
+          source_file: 'mqtop.rb'
+          destination_repo: 'frahlg/homebrew-mqtop'
           destination_folder: 'Formula'
           user_email: 'github-actions[bot]@users.noreply.github.com'
           user_name: 'github-actions[bot]'
