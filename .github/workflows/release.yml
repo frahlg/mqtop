@@ -142,7 +142,7 @@ jobs:
 
       - name: Download checksums
         run: |
-          curl -sL "https://github.com/srcfl/mqtop/releases/download/v${{ steps.version.outputs.version }}/checksums.txt" -o checksums.txt
+          curl -sL "https://github.com/frahlg/mqtop/releases/download/v${{ steps.version.outputs.version }}/checksums.txt" -o checksums.txt
           cat checksums.txt
 
       - name: Parse checksums
@@ -161,28 +161,28 @@ jobs:
 
           class Mqtop < Formula
             desc "High-performance MQTT explorer TUI - like htop for your broker"
-            homepage "https://github.com/srcfl/mqtop"
+            homepage "https://github.com/frahlg/mqtop"
             version "${{ steps.version.outputs.version }}"
             license "MIT"
 
             on_macos do
               on_arm do
-                url "https://github.com/srcfl/mqtop/releases/download/v#{version}/mqtop-macos-arm64"
+                url "https://github.com/frahlg/mqtop/releases/download/v#{version}/mqtop-macos-arm64"
                 sha256 "${{ steps.checksums.outputs.macos_arm64 }}"
               end
               on_intel do
-                url "https://github.com/srcfl/mqtop/releases/download/v#{version}/mqtop-macos-x64"
+                url "https://github.com/frahlg/mqtop/releases/download/v#{version}/mqtop-macos-x64"
                 sha256 "${{ steps.checksums.outputs.macos_x64 }}"
               end
             end
 
             on_linux do
               on_arm do
-                url "https://github.com/srcfl/mqtop/releases/download/v#{version}/mqtop-linux-arm64"
+                url "https://github.com/frahlg/mqtop/releases/download/v#{version}/mqtop-linux-arm64"
                 sha256 "${{ steps.checksums.outputs.linux_arm64 }}"
               end
               on_intel do
-                url "https://github.com/srcfl/mqtop/releases/download/v#{version}/mqtop-linux-x64"
+                url "https://github.com/frahlg/mqtop/releases/download/v#{version}/mqtop-linux-x64"
                 sha256 "${{ steps.checksums.outputs.linux_x64 }}"
               end
             end
@@ -207,7 +207,7 @@ jobs:
           API_TOKEN_GITHUB: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         with:
           source_file: 'mqtop.rb'
-          destination_repo: 'srcfl/homebrew-tap'
+          destination_repo: 'frahlg/homebrew-tap'
           destination_folder: 'Formula'
           user_email: 'github-actions[bot]@users.noreply.github.com'
           user_name: 'github-actions[bot]'
