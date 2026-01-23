@@ -31,8 +31,16 @@ pub fn render_david_easter_egg(frame: &mut Frame) {
         )),
         Line::from(""),
         Line::from(vec![
-            Span::styled("MESSAGES QUEUE UP, WAITING THEIR TURN. MUCH LIKE ", Style::default().fg(Color::White)),
-            Span::styled("SOULS", Style::default().fg(Color::Cyan).add_modifier(Modifier::ITALIC)),
+            Span::styled(
+                "MESSAGES QUEUE UP, WAITING THEIR TURN. MUCH LIKE ",
+                Style::default().fg(Color::White),
+            ),
+            Span::styled(
+                "SOULS",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::ITALIC),
+            ),
             Span::styled(",", Style::default().fg(Color::White)),
         ]),
         Line::from(Span::styled(
@@ -46,11 +54,15 @@ pub fn render_david_easter_egg(frame: &mut Frame) {
         Line::from(""),
         Line::from(Span::styled(
             "  * Death had once tried to implement QoS levels for the",
-            Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC),
+            Style::default()
+                .fg(Color::DarkGray)
+                .add_modifier(Modifier::ITALIC),
         )),
         Line::from(Span::styled(
             "    afterlife. QoS 0 (\"at most once\") proved unpopular.",
-            Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC),
+            Style::default()
+                .fg(Color::DarkGray)
+                .add_modifier(Modifier::ITALIC),
         )),
         Line::from(""),
         Line::from(Span::styled(
@@ -68,7 +80,9 @@ pub fn render_david_easter_egg(frame: &mut Frame) {
         Line::from(""),
         Line::from(Span::styled(
             "  ** The OED. Hardcover. Repeatedly.",
-            Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC),
+            Style::default()
+                .fg(Color::DarkGray)
+                .add_modifier(Modifier::ITALIC),
         )),
         Line::from(""),
         Line::from(Span::styled(
