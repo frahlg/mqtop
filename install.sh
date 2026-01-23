@@ -2,9 +2,9 @@
 set -e
 
 # mqtop Installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/srcfl/mqtop/master/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/frahlg/mqtop/master/install.sh | bash
 
-REPO="srcfl/mqtop"
+REPO="frahlg/mqtop"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 BINARY_NAME="mqtop"
 

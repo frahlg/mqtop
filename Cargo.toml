@@ -3,7 +3,7 @@ name = "mqtop"
 version = "0.4.2"
 edition = "2021"
 description = "High-performance MQTT explorer TUI - like htop for your broker"
-authors = ["Sourceful Energy"]
+authors = ["Fredrik Ahlgren <fredrik@frahlg.se>"]
 
 [dependencies]
 # MQTT client

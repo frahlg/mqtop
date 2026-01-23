@@ -7,7 +7,7 @@ set -e
 VERSION="${1:-$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.1.0")}"
 VERSION_NUM="${VERSION#v}"
 FORMULA="$(dirname "$0")/mqtop.rb"
-REPO="srcfl/mqtop"
+REPO="frahlg/mqtop"
 
 echo "Updating formula for version ${VERSION}..."
 

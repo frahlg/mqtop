@@ -1,432 +1,296 @@
 # mqtop
 
-A high-performance MQTT explorer TUI built in Rust by Sourceful Energy. Like htop for your MQTT broker - designed to handle high-throughput IoT telemetry streams.
+*"In the beginning there was the Message, and the Message was with the Broker, and the Message was... well, probably JSON."*
+
+A high-performance MQTT explorer TUI built in Rust. Like htop for your MQTT broker, except it won't judge you for subscribing to `#` in production.*
+
+**It handles 1000+ messages per second without breaking a sweat, much like Death handles souls - efficiently and without unnecessary drama.*
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ mqtop │ ● Connected │ Topics: 436 │ Msgs: 12.5k (219/s) │ 5m │
-├─────────────────┬───────────────────────────────┬───────────────────────────┤
-│ Topics          │ Messages                      │ Stats                     │
-│                 │                               │                           │
-│ ▼ sensors       │ sensors/device-001/temp       │ Connection                │
-│   ▼ device-001  │                               │   Status: Connected       │
-│     ▶ temp      │ {                             │   Host: mqtt:8883         │
-│   ★ device-002  │   "timestamp": 1703...        │                           │
-│ ▶ metrics       │   "value": 23.5,              │ Messages                  │
-│ ▶ status        │   "unit": "celsius"           │   Total: 12.5k            │
-│                 │ }                             │   Rate: 219.2/s           │
-│                 │                               │                           │
-│                 │                               │ Device Health             │
-│                 │                               │   ● 12 healthy  ● 2 warn  │
-│                 │                               │                           │
-│                 │                               │ Tracked Metrics           │
-│                 │                               │   value: 23.5             │
-│                 │                               │   ▃▄▅▆▅▄▃▄▅▆▇▆▅▄▃▄▅▆▇█   │
-└─────────────────┴───────────────────────────────┴───────────────────────────┘
+│ mqtop │ ● Connected │ Topics: 436 │ Msgs: 12.5k (219/s) │ 5m              │
+├─────────────────┬───────────────────────────────────────┬───────────────────┤
+│ Topics          │ Messages                              │ Stats             │
+│                 │                                       │                   │
+│ ▼ sensors       │ sensors/device-001/temp               │ Connection        │
+│   ▼ device-001  │                                       │   Status: ●       │
+│     ▶ temp      │ {                                     │   Host: mqtt:8883 │
+│   ★ device-002  │   "timestamp": 1703...                │                   │
+│ ▶ metrics       │   "value": 23.5,                      │ Messages          │
+│ ▶ status        │   "unit": "celsius"                   │   Total: 12.5k    │
+│                 │ }                                     │   Rate: 219.2/s   │
+│                 │                                       │                   │
+│                 │                                       │ Device Health     │
+│                 │                                       │   ● 12 healthy    │
+│                 │                                       │   ● 2 warning     │
+└─────────────────┴───────────────────────────────────────┴───────────────────┘
  q:Quit /:Search f:Filter s:Star y:Copy m:Track ?:Help
 ```
 
+<sub>* Though we make no guarantees about what the Librarian would say if you tried subscribing to `ook/#`.</sub>
+
+---
+
 ## Features
 
-- **Real-time MQTT streaming** - Subscribe to any topic pattern, handles 1000+ msg/sec
-- **Hierarchical topic tree** - Collapsible tree view with configurable color coding
-- **Device health monitoring** - Auto-tracks device activity and health status
-- **Metric tracking with sparklines** - Track numeric fields over time with live graphs
-- **MQTT wildcard filters** - Filter topics using `+` and `#` patterns
-- **Latency monitoring** - Track message delays and jitter
-- **Starred topics** - Bookmark important topics with persistence
-- **Publish bookmarks** - Save publish presets for quick one-click testing
-- **MQTT publishing** - Publish messages directly from the TUI with QoS and retain options
-- **Clipboard support** - Copy topics and payloads
-- **JSON syntax highlighting** - Pretty-printed payload inspection
-- **Vim-style navigation** - `hjkl`, arrows, and more
-- **Resilient connection** - Auto-reconnect with exponential backoff
+The universe, as has been observed, operates on certain immutable rules. So does mqtop:
+
+- **Real-time MQTT streaming** - Messages arrive faster than you can read them, much like footnotes in a Discworld novel
+- **Hierarchical topic tree** - Collapsible, expandable, and infinitely more organized than L-space
+- **Device health monitoring** - Knows when your devices are healthy, warning, or have shuffled off this mortal coil
+- **Metric tracking with sparklines** - Little graphs that go up and down, creating the illusion of understanding
+- **MQTT wildcard filters** - `+` and `#` patterns, because sometimes you need to catch everything
+- **Latency monitoring** - Track message delays with the precision of a well-oiled mechanism
+- **Starred topics** - Bookmark the important ones, forget the rest
+- **Publish bookmarks** - Save your favorite messages for rapid-fire testing
+- **MQTT publishing** - Send messages directly, no external tools required
+- **Clipboard support** - Copy topics and payloads to share the joy
+- **JSON syntax highlighting** - Pretty colors for pretty data
+- **Vim-style navigation** - `hjkl` for those who have Seen The Light
+- **Resilient connection** - Auto-reconnect with exponential backoff, because hope springs eternal
+
+---
 
 ## Installation
 
-### Quick Install (Recommended)
+### The Easy Way
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/srcfl/mqtop/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/frahlg/mqtop/master/install.sh | bash
 ```
 
 **Homebrew (macOS/Linux):**
 ```bash
-brew tap srcfl/tap
+brew tap frahlg/tap
 brew install mqtop
 ```
 
-### Pre-built binaries
+### Pre-built Binaries
 
-Download from [GitHub Releases](https://github.com/srcfl/mqtop/releases):
+For those who prefer their software pre-compiled, download from [GitHub Releases](https://github.com/frahlg/mqtop/releases):
 
-| Platform | Download |
-|----------|----------|
-| macOS (Apple Silicon) | `mqtop-macos-arm64` |
-| macOS (Intel) | `mqtop-macos-x64` |
-| Linux (x64) | `mqtop-linux-x64` |
-| Linux (ARM64/Raspberry Pi) | `mqtop-linux-arm64` |
-| Windows | `mqtop-windows-x64.exe` |
+| Platform | Binary | Notes |
+|----------|--------|-------|
+| macOS (Apple Silicon) | `mqtop-macos-arm64` | For the M1/M2/M3 enlightened |
+| macOS (Intel) | `mqtop-macos-x64` | For the x86 nostalgic |
+| Linux (x64) | `mqtop-linux-x64` | The penguin approves |
+| Linux (ARM64) | `mqtop-linux-arm64` | Raspberry Pi and friends |
+| Windows | `mqtop-windows-x64.exe` | It works here too |
 
 ```bash
-# macOS/Linux: Make executable after download
+# Make it executable (macOS/Linux)
 chmod +x mqtop-*
 
-# macOS: Remove quarantine (if you get a security warning)
+# macOS: Remove the quarantine attribute
 xattr -cr ./mqtop-*
 
-./mqtop-macos-arm64 --help
+# Run it
+./mqtop --help
 ```
 
-### Build from source
+### Build From Source
 
-Requires Rust 1.70+:
+For those who prefer to compile their own reality:
 
 ```bash
-git clone https://github.com/srcfl/mqtop.git
+git clone https://github.com/frahlg/mqtop.git
 cd mqtop
 cargo build --release
 ```
 
-Binary will be at `target/release/mqtop` (3MB).
+Binary materializes at `target/release/mqtop` (~3MB).
+
+---
 
 ## Quick Start
 
-### 1. Create a config file
+1. **Run mqtop:**
+   ```bash
+   mqtop
+   ```
 
-mqtop looks for configuration in this order:
-1. Path specified with `-c/--config`
-2. `./config.toml` in current directory
-3. `~/.config/mqtop/config.toml` (recommended for global install)
+2. **The Server Manager opens automatically.** Press `a` to add a new server.
 
-```bash
-# Quick interactive setup
-./mqtop --setup
+3. **Fill in your broker details:**
+   - Name: `my-broker`
+   - Host: `mqtt.example.com`
+   - Port: `8883` (or `1883` for non-TLS)
+   - Enable TLS if needed
+   - Set your client ID, username, password, or token
 
-# Or for global config (recommended)
-mkdir -p ~/.config/mqtop
-cp config.toml.example ~/.config/mqtop/config.toml
-# Edit with your MQTT credentials
+4. **Press `Enter` to save**, then select your server and press `Enter` again to connect.
 
-# Or for project-specific config
-cp config.toml.example config.toml
-```
+5. **Watch the messages flow.** Navigate with arrow keys or `hjkl`, expand topics with `Enter` or `→`.
 
-### 2. Or use command-line arguments
+That's it. No config files required (though you can use them if you're that kind of person).
 
-```bash
-# With token passed via CLI
-./mqtop --host mqtt.example.com --port 8883 --tls --client-id mydevice --token "your-jwt-token"
-
-# Subscribe to specific topics
-./mqtop -c config.toml --topic "sensors/#"
-```
-
-### 3. Run it
-
-```bash
-./mqtop
-```
-
-## Configuration
-
-Create `config.toml` in `~/.config/mqtop/` or your working directory:
-
-```toml
-[mqtt]
-active_server = "default"
-
-[[mqtt.servers]]
-name = "default"
-host = "mqtt.example.com"
-port = 8883
-use_tls = true
-client_id = "mqtop-explorer"
-token = "your-jwt-token"           # Stored in config
-subscribe_topic = "#"              # Subscribe to all topics
-keep_alive_secs = 30
-
-[ui]
-message_buffer_size = 100          # Messages kept per topic
-stats_window_secs = 10             # Window for rate calculations
-tick_rate_ms = 100                 # UI refresh rate
-
-# Optional: Custom topic highlighting
-[[ui.topic_colors]]
-pattern = "sensors"
-color = "cyan"
-
-[[ui.topic_colors]]
-pattern = "alerts"
-color = "red"
-
-# Optional: Count topics by category in Stats panel
-[[ui.topic_categories]]
-label = "Sensors"
-pattern = "sensors"
-color = "cyan"
-
-[[ui.topic_categories]]
-label = "Alerts"
-pattern = "alerts"
-color = "red"
-```
-
-### CLI Options
-
-```
-Usage: mqtop [OPTIONS]
-
-Options:
-  -c, --config <FILE>      Config file path [default: ~/.config/mqtop/config.toml]
-      --host <HOST>        MQTT broker host (overrides config)
-      --port <PORT>        MQTT broker port (overrides config)
-      --client-id <ID>     Client ID (overrides config)
-  -u, --username <USER>    Username (defaults to client_id)
-      --token <TOKEN>      Token (overrides config)
-  -t, --topic <TOPIC>      Subscribe topic (overrides config)
-      --tls                Enable TLS
-      --setup              Run interactive config wizard
-      --list-backups       List config backups
-      --rollback <INDEX>   Restore config from backup (1 = newest)
-  -d, --debug              Enable debug logging to mqtop.log
-  -h, --help               Print help
-  -V, --version            Print version
-```
+---
 
 ## Usage Guide
 
 ### Navigation
 
-| Key | Action |
-|-----|--------|
-| `Tab` | Switch between panels (Topics → Messages → Stats) |
-| `1` `2` `3` | Jump to panel directly |
+| Key | What It Does |
+|-----|--------------|
+| `Tab` | Cycle panels (Topics → Messages → Stats) |
+| `1` `2` `3` | Jump directly to panel |
 | `↑` `↓` or `j` `k` | Move up/down |
-| `←` `→` or `h` `l` | Collapse/expand or move into child |
-| `H` `L` | Collapse/expand full branch |
+| `←` `→` or `h` `l` | Collapse/expand or dive deeper |
 | `Enter` | Toggle expand/collapse |
-| `PgUp` `PgDn` | Page up/down |
-| `g` `G` | Go to top/bottom |
-
-On smaller terminals, mqtop automatically switches to 2-panel or 1-panel layouts.
+| `g` / `G` | Top / Bottom |
+| `PgUp` `PgDn` | Page navigation |
 
 ### Search & Filter
 
-| Key | Action |
-|-----|--------|
-| `/` | Open fuzzy search |
-| `PgUp` `PgDn` | Scroll search results |
+| Key | What It Does |
+|-----|--------------|
+| `/` | Fuzzy search |
 | `f` | Set topic filter (MQTT wildcards) |
-| `F` | Clear topic filter |
-| `*` | Toggle starred-only view |
-| `Esc` | Cancel/close overlay |
-| `S` | Open server manager |
+| `F` | Clear filter |
+| `*` | Show only starred topics |
 
 **Filter examples:**
 - `sensors/#` - All sensor topics
 - `sensors/+/temperature` - Temperature from any device
-- `building/+/floor/#` - All topics under any floor
+- `ook/#` - The Librarian's private topics*
 
-### Topic Management
-
-| Key | Action |
-|-----|--------|
-| `s` | Star/unstar current topic |
-| `y` | Copy topic path to clipboard |
-| `Y` | Copy payload to clipboard |
+<sub>* Not recommended unless you want to be hit with a very large dictionary.</sub>
 
 ### Server Manager
 
-| Key | Action |
-|-----|--------|
+| Key | What It Does |
+|-----|--------------|
 | `S` | Open server manager |
-| `Enter` | Edit server |
-| `a` | Add server |
+| `Enter` | Activate selected server |
+| `e` | Edit server configuration |
+| `a` | Add new server |
 | `d` | Delete server |
-| `Space` | Activate server |
-| `w` | Save config |
-| `Esc` | Close manager |
+| `Esc` | Close |
 
-### Server Edit
+### Publishing
 
-| Key | Action |
-|-----|--------|
-| `Tab` `Shift+Tab` | Next/previous field |
-| `←` `→` `Home` `End` | Move cursor in field |
-| `Backspace` `Del` | Delete characters |
-| `Space` | Toggle TLS |
-| `Enter` | Save changes |
-| `Esc` | Cancel edit |
-
-### Publishing Messages
-
-mqtop allows you to publish MQTT messages directly from the TUI, perfect for testing and debugging.
-
-| Key | Action |
-|-----|--------|
+| Key | What It Does |
+|-----|--------------|
 | `P` | Open publish dialog |
-| `Ctrl+P` | Copy current message to publish dialog |
-| `Tab` `Shift+Tab` | Navigate between fields |
-| `Space` | Toggle QoS (0/1/2) or Retain on/off |
-| `0` `1` `2` | Set QoS directly |
-| `Ctrl+S` | Save as bookmark |
-| `Enter` | Publish message |
-| `Esc` | Cancel |
-
-**Publish Dialog Fields:**
-- **Topic** - MQTT topic to publish to
-- **Payload** - Message content (supports multi-line)
-- **QoS** - Quality of Service (0=At most once, 1=At least once, 2=Exactly once)
-- **Retain** - Whether the broker should retain the message
-
-### Bookmarks (Publish Presets)
-
-Save frequently-used publish settings as bookmarks for quick one-click publishing. Perfect for:
-- Testing device commands
-- Sending alert triggers
-- Debugging with specific payloads
-- Rapid-fire testing scenarios
-
-| Key | Action |
-|-----|--------|
+| `Ctrl+P` | Copy current message to publish |
 | `B` | Open bookmark manager |
-| `Enter` | **Quick publish** selected bookmark (stays open for rapid testing) |
-| `a` | Add new bookmark |
-| `e` | Edit selected bookmark |
-| `d` | Delete selected bookmark |
-| `↑` `↓` or `j` `k` | Navigate bookmarks |
-| `Esc` | Close bookmark manager |
-
-**Bookmark Fields:**
-- **Name** - Display name (e.g., "Temperature Alert")
-- **Category** - Optional grouping (e.g., "testing", "alerts") - bookmarks are grouped by category
-- **Topic** - MQTT topic
-- **Payload** - Default payload content
-- **QoS** - Quality of Service level
-- **Retain** - Retain flag
-
-**Quick Workflows:**
-
-1. **Save from Publish Dialog:**
-   - Press `P` to open publish dialog
-   - Fill in topic, payload, QoS, retain
-   - Press `Ctrl+S` to save as bookmark
-   - Edit the name and category, then `Enter` to save
-
-2. **Rapid-Fire Testing:**
-   - Press `B` to open bookmark manager
-   - Navigate to desired preset
-   - Press `Enter` to publish (manager stays open)
-   - Repeat for rapid testing
-
-3. **Copy & Modify:**
-   - Select a topic in the tree
-   - Press `Ctrl+P` to copy to publish dialog
-   - Modify payload as needed
-   - Press `Ctrl+S` to save as bookmark for future use
-
-Bookmarks are persisted in `~/.config/mqtop/userdata.json` and survive restarts.
-
-### Metrics & Display
-
-| Key | Action |
-|-----|--------|
-| `m` | Track metric from current message (opens field selector) |
-| `p` | Cycle payload mode (Auto → Raw → Hex → JSON) |
-| `c` | Clear statistics |
+| `Ctrl+S` | Save publish as bookmark |
 
 ### General
 
-| Key | Action |
-|-----|--------|
-| `?` | Toggle help overlay |
-| `q` or `Ctrl+C` | Quit |
+| Key | What It Does |
+|-----|--------------|
+| `s` | Star/unstar topic |
+| `y` | Copy topic to clipboard |
+| `Y` | Copy payload to clipboard |
+| `m` | Track metric from message |
+| `p` | Cycle payload mode (Auto → Raw → Hex → JSON) |
+| `c` | Clear statistics |
+| `?` | Help overlay |
+| `q` | Quit |
 
-## Panels
+---
 
-### Topic Tree (Left)
+## Configuration (Optional)
 
-Displays all discovered topics in a hierarchical tree. Topic colors are configurable via `[[ui.topic_colors]]` in your config file. UUIDs and IDs are automatically shown in gray.
+While mqtop works fine without config files, you can create one at `~/.config/mqtop/config.toml` for persistent settings:
 
-A `★` indicator shows starred topics.
+```toml
+[mqtt]
+active_server = "production"
 
-### Messages (Center)
+[[mqtt.servers]]
+name = "production"
+host = "mqtt.example.com"
+port = 8883
+use_tls = true
+client_id = "mqtop-prod"
+subscribe_topic = "#"
+keep_alive_secs = 30
 
-Shows messages for the selected topic with:
-- Timestamp
-- JSON syntax highlighting (keys, strings, numbers, booleans)
-- Multiple display modes (Auto, Raw, Hex, JSON)
+[ui]
+message_buffer_size = 100    # Messages per topic
+stats_window_secs = 10       # Rate calculation window
+tick_rate_ms = 100           # UI refresh rate
 
-### Stats (Right)
+# Topic highlighting
+[[ui.topic_colors]]
+pattern = "sensors"
+color = "cyan"
 
-Real-time statistics including:
-- Connection status
-- Message count and rate
-- Data throughput
-- **Latency metrics** - Message delays, inter-arrival times, jitter
-- **Topic categories** - Configurable counters via `[[ui.topic_categories]]`
-- Device health summary
-- Tracked metrics with sparklines
+[[ui.topic_colors]]
+pattern = "alerts"
+color = "red"
+```
+
+Servers added via the UI are automatically saved to the config file.
+
+---
 
 ## Data Persistence
 
 mqtop stores data in `~/.config/mqtop/`:
-- `config.toml` - Configuration file (optional, can also use `./config.toml`)
+
+- `config.toml` - Configuration and servers
 - `backups/` - Rolling config backups (last 5)
-- `userdata.json` - Starred topics, tracked metrics, and publish bookmarks (auto-saved)
+- `userdata.json` - Starred topics, metrics, bookmarks
+
+---
 
 ## Troubleshooting
 
-### Connection issues
+### Connection Issues
 
-Enable debug logging:
 ```bash
-./mqtop --debug
+mqtop --debug
 tail -f mqtop.log
 ```
 
-### Large payloads
+The log file knows all.
 
-mqtop supports payloads up to 1MB. If you see truncated messages, check the source.
+### High CPU Usage
 
-### High CPU usage
-
-Reduce tick rate in config:
 ```toml
 [ui]
-tick_rate_ms = 200  # Default is 100
+tick_rate_ms = 200  # Slower refresh
 ```
+
+---
 
 ## Development
 
 ```bash
-# Run tests
-cargo test
-
-# Run with debug output
-cargo run -- --debug
-
-# Build release
-cargo build --release
+cargo test              # Run tests
+cargo run -- --debug    # Debug mode
+cargo build --release   # Production build
 ```
+
+---
 
 ## Author
 
 Created by **Fredrik Ahlgren** ([@frahlg](https://github.com/frahlg) on GitHub, [@frahlg](https://x.com/frahlg) on X)
-CEO of [Sourceful Labs AB](https://sourceful.energy) (Sourceful Energy)
 
-Co-authored with [Claude Code](https://claude.com/claude-code).
+Co-authored with [Claude Code](https://claude.ai/code).
+
+---
 
 ## License
 
-MIT License - Sourceful Energy 2024
+MIT License - See [LICENSE](LICENSE) file.
+
+---
 
 ## Contributing
 
-1. Fork the repository
+1. Fork it
 2. Create a feature branch
-3. Submit a pull request
+3. Make your changes
+4. Submit a pull request
 
-For bugs and feature requests, open an issue on GitHub.
+For bugs and features, open an issue.
+
+---
+
+*GNU Terry Pratchett*
