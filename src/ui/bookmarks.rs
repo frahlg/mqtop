@@ -94,12 +94,12 @@ pub fn render_bookmark_manager(frame: &mut Frame, app: &App) {
                 Style::default().fg(Color::White)
             };
 
-            let prefix = if is_selected { "► " } else { "  " };
+            let prefix = if is_selected { "▶ " } else { "  " };
 
-            // Truncate topic if too long
+            // Truncate topic if too long (safely handling UTF-8)
             let max_topic_len = 30;
             let topic_display = if bookmark.topic.len() > max_topic_len {
-                format!("{}...", &bookmark.topic[..max_topic_len - 3])
+                format!("{}...", truncate_safe(&bookmark.topic, max_topic_len - 3))
             } else {
                 bookmark.topic.clone()
             };
@@ -435,6 +435,18 @@ fn render_retain_field(frame: &mut Frame, retain: bool, focused: bool, area: Rec
 
     let text = Paragraph::new(vec![retain_text, hint]);
     frame.render_widget(text, inner);
+}
+
+/// Safely truncate a string at a valid UTF-8 character boundary
+fn truncate_safe(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    let mut end = max_bytes;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {

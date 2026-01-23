@@ -92,6 +92,8 @@ pub struct App {
     pub selected_topic: Option<String>,
     /// Show help overlay
     pub show_help: bool,
+    /// Show David easter egg overlay
+    pub show_david_easter_egg: bool,
     /// Payload display mode
     pub payload_mode: PayloadMode,
     /// Status message (temporary)
@@ -466,6 +468,7 @@ impl App {
             stats_scroll: 0,
             selected_topic: None,
             show_help: false,
+            show_david_easter_egg: false,
             payload_mode: PayloadMode::Auto,
             status_message: None,
             metric_tracker: MetricTracker::new(100), // Keep last 100 data points
@@ -526,13 +529,20 @@ impl App {
         self.user_data.is_starred(topic)
     }
 
+    /// Reset tree selection and scroll when visible topic list changes
+    fn reset_tree_selection(&mut self) {
+        self.selected_topic_index = 0;
+        self.tree_scroll = 0;
+        self.update_selected_topic();
+    }
+
     /// Toggle filter mode
     pub fn toggle_filter_mode(&mut self) {
         self.filter_mode = match self.filter_mode {
             FilterMode::All => FilterMode::Starred,
             FilterMode::Starred => FilterMode::All,
         };
-        self.selected_topic_index = 0;
+        self.reset_tree_selection();
         self.set_status(match self.filter_mode {
             FilterMode::All => "Showing all topics",
             FilterMode::Starred => "Showing starred only",
@@ -704,7 +714,7 @@ impl App {
                 }
                 self.input_mode = InputMode::Normal;
                 self.filter_input.clear();
-                self.selected_topic_index = 0;
+                self.reset_tree_selection();
             }
             KeyCode::Backspace => {
                 self.filter_input.pop();
@@ -721,7 +731,7 @@ impl App {
         self.topic_filter = None;
         self.filter_input.clear();
         self.set_status("Filter cleared");
-        self.selected_topic_index = 0;
+        self.reset_tree_selection();
     }
 
     pub fn open_server_manager(&mut self) {
@@ -963,6 +973,15 @@ impl App {
             }
             KeyCode::Char(c) => {
                 self.search_query.push(c);
+                // Easter egg: check for "david" (case-insensitive)
+                if self.search_query.eq_ignore_ascii_case("david") {
+                    self.show_david_easter_egg = true;
+                    self.input_mode = InputMode::Normal;
+                    self.search_query.clear();
+                    self.search_results.clear();
+                    self.search_scroll = 0;
+                    return;
+                }
                 self.update_search_results();
             }
             KeyCode::Down => {
@@ -1096,10 +1115,12 @@ impl App {
             // Open bookmark manager
             KeyCode::Char('B') => self.open_bookmark_manager(),
 
-            // Escape closes help
+            // Escape closes overlays
             KeyCode::Esc => {
                 if self.show_help {
                     self.show_help = false;
+                } else if self.show_david_easter_egg {
+                    self.show_david_easter_egg = false;
                 }
             }
 
@@ -1306,7 +1327,7 @@ impl App {
                 }
             }
             Panel::Stats => {
-                self.stats_scroll = 100; // Scroll to approximate bottom
+                self.stats_scroll = usize::MAX; // Will be clamped during rendering
             }
         }
     }
@@ -1460,12 +1481,24 @@ impl App {
             KeyCode::Char('a') => {
                 self.start_server_edit(None);
             }
-            KeyCode::Char('e') | KeyCode::Enter => {
+            KeyCode::Char('e') => {
                 if !self.config.mqtt.servers.is_empty() {
                     let index = self
                         .server_manager_index
                         .min(self.config.mqtt.servers.len() - 1);
                     self.start_server_edit(Some(index));
+                }
+            }
+            KeyCode::Enter => {
+                // Activate server and close the window
+                if let Some(server) = self.config.mqtt.servers.get(self.server_manager_index) {
+                    self.config.mqtt.active_server = server.name.clone();
+                    if let Err(err) = self.save_config() {
+                        self.set_status(&format!("Save failed: {}", err));
+                    } else {
+                        self.pending_server_switch = Some(self.server_manager_index);
+                        self.input_mode = InputMode::Normal;
+                    }
                 }
             }
             KeyCode::Char('w') => {
@@ -1502,16 +1535,6 @@ impl App {
                             self.pending_server_switch = self.config.mqtt.active_index();
                         }
                         self.set_status("Server deleted");
-                    }
-                }
-            }
-            KeyCode::Char(' ') => {
-                if let Some(server) = self.config.mqtt.servers.get(self.server_manager_index) {
-                    self.config.mqtt.active_server = server.name.clone();
-                    if let Err(err) = self.save_config() {
-                        self.set_status(&format!("Save failed: {}", err));
-                    } else {
-                        self.pending_server_switch = Some(self.server_manager_index);
                     }
                 }
             }

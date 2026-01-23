@@ -113,7 +113,7 @@ fn create_message_item(msg: &MqttMessage, _is_selected: bool) -> ListItem<'stati
         .map(|s| {
             let first_line = s.lines().next().unwrap_or("");
             if first_line.len() > 40 {
-                format!("{}...", &first_line[..40])
+                format!("{}...", truncate_safe(first_line, 40))
             } else {
                 first_line.to_string()
             }
@@ -310,4 +310,16 @@ fn truncate_topic(topic: &str, max_len: usize) -> String {
     } else {
         format!("...{}", &topic[topic.len() - max_len + 3..])
     }
+}
+
+/// Safely truncate a string at a valid UTF-8 character boundary
+fn truncate_safe(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    let mut end = max_bytes;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
 }

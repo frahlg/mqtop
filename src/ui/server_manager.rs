@@ -42,11 +42,6 @@ pub fn render_server_manager(frame: &mut Frame, app: &App) {
             app.config.mqtt.active_server.clone(),
             Style::default().fg(Color::Yellow),
         ),
-        Span::raw("  ("),
-        Span::styled("Space", Style::default().fg(Color::Cyan)),
-        Span::raw(" to switch, "),
-        Span::styled("w", Style::default().fg(Color::Cyan)),
-        Span::raw(" to save)"),
     ]));
     frame.render_widget(header, chunks[0]);
 
@@ -96,15 +91,13 @@ pub fn render_server_manager(frame: &mut Frame, app: &App) {
 
     let footer = Paragraph::new(Line::from(vec![
         Span::styled("Enter", Style::default().fg(Color::Cyan)),
+        Span::raw(" activate  "),
+        Span::styled("e", Style::default().fg(Color::Cyan)),
         Span::raw(" edit  "),
         Span::styled("a", Style::default().fg(Color::Cyan)),
         Span::raw(" add  "),
         Span::styled("d", Style::default().fg(Color::Cyan)),
         Span::raw(" delete  "),
-        Span::styled("Space", Style::default().fg(Color::Cyan)),
-        Span::raw(" activate  "),
-        Span::styled("w", Style::default().fg(Color::Cyan)),
-        Span::raw(" save  "),
         Span::styled("Esc", Style::default().fg(Color::Cyan)),
         Span::raw(" close"),
     ]));

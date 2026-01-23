@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 #![allow(clippy::if_same_then_else)]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
 /// Tracks device health based on telemetry message frequency
@@ -41,8 +41,8 @@ pub struct DeviceHealth {
     pub message_count: u64,
     /// Last message timestamp
     pub last_seen: Instant,
-    /// Messages in current rate window
-    pub recent_messages: Vec<Instant>,
+    /// Messages in current rate window (VecDeque for O(1) removal from front)
+    pub recent_messages: VecDeque<Instant>,
     /// Current health status
     pub status: HealthStatus,
     /// Last payload size
@@ -58,7 +58,7 @@ impl DeviceHealth {
             device_type: None,
             message_count: 0,
             last_seen: Instant::now(),
-            recent_messages: Vec::new(),
+            recent_messages: VecDeque::new(),
             status: HealthStatus::Unknown,
             last_payload_size: 0,
             topics: Vec::new(),
@@ -123,7 +123,7 @@ impl DeviceTracker {
             device.message_count += 1;
             device.last_seen = Instant::now();
             device.last_payload_size = payload_size;
-            device.recent_messages.push(Instant::now());
+            device.recent_messages.push_back(Instant::now());
 
             // Set device type if found
             if device.device_type.is_none() {

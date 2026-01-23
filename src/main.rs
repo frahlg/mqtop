@@ -346,15 +346,15 @@ async fn run_app(config: Config, config_path: PathBuf, needs_server_setup: bool)
     // Create channel for MQTT events
     let (mqtt_tx, mut mqtt_rx) = mpsc::unbounded_channel::<MqttEvent>();
 
-    // Start MQTT client only if we have servers configured
-    let mut mqtt_client: Option<MqttClient> = if !needs_server_setup {
-        Some(connect_mqtt(&app, mqtt_tx.clone()).await?)
-    } else {
-        // Open Server Manager automatically when no servers are configured
-        app.open_server_manager();
+    // Never auto-connect - always start with Server Manager open
+    // User must explicitly select a server (Enter) to connect
+    let mut mqtt_client: Option<MqttClient> = None;
+    app.open_server_manager();
+    if needs_server_setup {
         app.set_status("No servers configured - press 'a' to add one");
-        None
-    };
+    } else {
+        app.set_status("Select a server and press Enter to connect");
+    }
 
     // Main loop
     loop {

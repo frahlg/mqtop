@@ -1,4 +1,5 @@
 mod bookmarks;
+mod david;
 mod filter;
 mod help;
 mod message_view;
@@ -119,6 +120,10 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     if app.show_help {
         render_help(frame);
     }
+
+    if app.show_david_easter_egg {
+        david::render_david_easter_egg(frame);
+    }
 }
 
 fn render_header(frame: &mut Frame, app: &App, area: Rect) {
@@ -167,7 +172,7 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
         InputMode::Search => "Enter:Select  Esc:Cancel  ↑↓:Navigate results",
         InputMode::MetricSelect => "Enter:Track  Esc:Cancel  ↑↓/jk:Navigate",
         InputMode::Filter => "Enter:Apply  Esc:Cancel  (empty to clear)",
-        InputMode::ServerManager => "Enter:Edit  a:Add  d:Delete  Space:Activate  Esc:Close",
+        InputMode::ServerManager => "Enter:Activate  e:Edit  a:Add  d:Delete  Esc:Close",
         InputMode::Publish => "Enter:Publish  Tab:Next field  Ctrl+S:Save Bookmark  Esc:Cancel",
         InputMode::BookmarkManager => "Enter:Publish  e:Edit  a:Add  d:Delete  Esc:Close",
     };

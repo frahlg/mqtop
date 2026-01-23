@@ -1,14 +1,14 @@
 #![allow(dead_code)]
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Tracks JSON schema changes for topics
 #[derive(Debug, Default)]
 pub struct SchemaTracker {
     /// Known schemas by topic (field paths -> type)
     schemas: HashMap<String, Schema>,
-    /// Recent schema changes
-    changes: Vec<SchemaChange>,
+    /// Recent schema changes (VecDeque for O(1) removal from front)
+    changes: VecDeque<SchemaChange>,
     /// Max changes to keep
     max_changes: usize,
 }
@@ -53,7 +53,7 @@ impl SchemaTracker {
     pub fn new() -> Self {
         Self {
             schemas: HashMap::new(),
-            changes: Vec::new(),
+            changes: VecDeque::new(),
             max_changes: 50,
         }
     }
@@ -75,9 +75,9 @@ impl SchemaTracker {
             // Record changes
             for change in &detected_changes {
                 if self.changes.len() >= self.max_changes {
-                    self.changes.remove(0);
+                    self.changes.pop_front(); // O(1) removal from VecDeque
                 }
-                self.changes.push(change.clone());
+                self.changes.push_back(change.clone());
             }
         }
 
@@ -139,8 +139,8 @@ impl SchemaTracker {
     }
 
     /// Get recent schema changes
-    pub fn recent_changes(&self) -> &[SchemaChange] {
-        &self.changes
+    pub fn recent_changes(&mut self) -> &[SchemaChange] {
+        self.changes.make_contiguous()
     }
 
     /// Check if there are any recent changes
