@@ -1,6 +1,6 @@
 [package]
 name = "mqtop"
-version = "0.4.2"
+version = "0.5.0"
 edition = "2021"
 description = "High-performance MQTT explorer TUI - like htop for your broker"
 authors = ["Fredrik Ahlgren <fredrik@frahlg.se>"]
