@@ -315,4 +315,3 @@ fn truncate_topic(topic: &str, max_len: usize) -> String {
         format!("...{}", &topic[topic.len() - max_len + 3..])
     }
 }
-

@@ -113,4 +113,3 @@ pub fn render_david_easter_egg(frame: &mut Frame) {
 
     frame.render_widget(paragraph, inner);
 }
-

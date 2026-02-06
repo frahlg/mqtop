@@ -100,4 +100,3 @@ fn format_value(v: f64) -> String {
         format!("{:.2}", v)
     }
 }
-

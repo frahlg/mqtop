@@ -220,10 +220,7 @@ pub fn render_retain_field(frame: &mut Frame, retain: bool, focused: bool, area:
                 .bg(Color::DarkGray),
         ))
     } else {
-        Line::from(Span::styled(
-            " OFF ",
-            Style::default().fg(Color::DarkGray),
-        ))
+        Line::from(Span::styled(" OFF ", Style::default().fg(Color::DarkGray)))
     };
 
     let hint = if focused {
@@ -248,7 +245,10 @@ pub fn key_hint(key: &str, action: &str) -> Vec<Span<'static>> {
                 .fg(Color::DarkGray)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(format!(" {} ", action), Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            format!(" {} ", action),
+            Style::default().fg(Color::DarkGray),
+        ),
     ]
 }
 

@@ -185,4 +185,3 @@ fn render_server_edit(frame: &mut Frame, app: &App, area: Rect) {
     hints.extend(dialog_key_hint("Esc", "Cancel"));
     frame.render_widget(Paragraph::new(Line::from(hints)), chunks[2]);
 }
-

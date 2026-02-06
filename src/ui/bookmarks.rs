@@ -130,10 +130,7 @@ pub fn render_bookmark_manager(frame: &mut Frame, app: &App) {
     hints.extend(dialog_key_hint("a", "Add"));
     hints.extend(dialog_key_hint("d", "Delete"));
     hints.extend(dialog_key_hint("Esc", "Close"));
-    frame.render_widget(
-        Paragraph::new(Line::from(hints)),
-        chunks[1],
-    );
+    frame.render_widget(Paragraph::new(Line::from(hints)), chunks[1]);
 }
 
 fn render_bookmark_edit(frame: &mut Frame, app: &App) {
@@ -240,8 +237,5 @@ fn render_bookmark_edit(frame: &mut Frame, app: &App) {
     hints.extend(dialog_key_hint("Enter", "Save"));
     hints.extend(dialog_key_hint("Tab", "Next"));
     hints.extend(dialog_key_hint("Esc", "Cancel"));
-    frame.render_widget(
-        Paragraph::new(Line::from(hints)),
-        chunks[5],
-    );
+    frame.render_widget(Paragraph::new(Line::from(hints)), chunks[5]);
 }

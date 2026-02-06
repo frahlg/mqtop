@@ -153,7 +153,10 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
     lines.push(Line::from(vec![
         Span::styled("  Buffered", Style::default().fg(Color::DarkGray)),
         Span::styled(
-            format!(" {}", format_number(app.message_buffer.total_stored() as u64)),
+            format!(
+                " {}",
+                format_number(app.message_buffer.total_stored() as u64)
+            ),
             Style::default().fg(Color::Yellow),
         ),
     ]));

@@ -163,4 +163,3 @@ fn highlight_match(text: &str, query: &str) -> Vec<Span<'static>> {
         vec![Span::raw(text.to_string())]
     }
 }
-

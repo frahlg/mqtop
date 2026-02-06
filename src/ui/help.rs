@@ -92,10 +92,7 @@ fn section(title: &str) -> Line<'static> {
 
 fn keybind(key: &str, desc: &str) -> Line<'static> {
     Line::from(vec![
-        Span::styled(
-            format!("  {:14}", key),
-            Style::default().fg(Color::Yellow),
-        ),
+        Span::styled(format!("  {:14}", key), Style::default().fg(Color::Yellow)),
         Span::raw(desc.to_string()),
     ])
 }

@@ -158,7 +158,10 @@ fn create_topic_item(
     if let Some((indicator, color)) = activity {
         if !indicator.is_empty() {
             spans.push(Span::raw(" "));
-            spans.push(Span::styled(indicator.to_string(), Style::default().fg(color)));
+            spans.push(Span::styled(
+                indicator.to_string(),
+                Style::default().fg(color),
+            ));
         }
     }
 

@@ -89,4 +89,3 @@ pub fn render_filter(frame: &mut Frame, app: &App) {
     ]));
     frame.render_widget(footer, chunks[2]);
 }
-

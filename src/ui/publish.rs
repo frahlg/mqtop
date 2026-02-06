@@ -84,8 +84,5 @@ pub fn render_publish(frame: &mut Frame, app: &App) {
     hints.extend(dialog_key_hint("Tab", "Next"));
     hints.extend(dialog_key_hint("^S", "Bookmark"));
     hints.extend(dialog_key_hint("Esc", "Cancel"));
-    frame.render_widget(
-        Paragraph::new(Line::from(hints)),
-        chunks[3],
-    );
+    frame.render_widget(Paragraph::new(Line::from(hints)), chunks[3]);
 }
