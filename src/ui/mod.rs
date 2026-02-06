@@ -9,6 +9,7 @@ mod search;
 mod server_manager;
 mod stats_view;
 mod tree_view;
+pub mod widgets;
 
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -19,6 +20,7 @@ use ratatui::{
 };
 
 use crate::app::{App, InputMode, Panel};
+use widgets::key_hint;
 
 pub use bookmarks::render_bookmark_manager;
 pub use filter::render_filter;
@@ -130,84 +132,196 @@ fn render_header(frame: &mut Frame, app: &App, area: Rect) {
     let status = app.connection_status();
     let color = app.connection_color();
 
+    // Connection status with animated indicator
+    let conn_indicator = match app.connection_state {
+        crate::mqtt::ConnectionState::Connected => "●",
+        crate::mqtt::ConnectionState::Connecting | crate::mqtt::ConnectionState::Reconnecting => {
+            "◌"
+        }
+        crate::mqtt::ConnectionState::Disconnected => "○",
+    };
+
+    let rate = app.stats.messages_per_second();
+    let rate_color = if rate >= 100.0 {
+        Color::Green
+    } else if rate > 0.0 {
+        Color::Yellow
+    } else {
+        Color::DarkGray
+    };
+
     let mut header_parts = vec![
         Span::styled(
             " mqtop ",
             Style::default()
-                .fg(Color::Cyan)
+                .fg(Color::Black)
+                .bg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw("│ "),
-        Span::styled(format!("● {}", status), Style::default().fg(color)),
-        Span::raw(" │ "),
-        Span::raw(format!("Topics: {} ", app.topic_tree.topic_count())),
-        Span::raw("│ "),
-        Span::raw(format!(
-            "Msgs: {} ({}/s)",
-            app.stats.total_messages(),
-            format_rate(app.stats.messages_per_second())
-        )),
-        Span::raw(" │ "),
-        Span::raw(format!("Uptime: {}", app.stats.uptime_string())),
+        Span::raw(" "),
+        Span::styled(
+            format!("{} {}", conn_indicator, status),
+            Style::default().fg(color),
+        ),
+        Span::styled(" │ ", Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            format!("{}", app.topic_tree.topic_count()),
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" topics", Style::default().fg(Color::DarkGray)),
+        Span::styled(" │ ", Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            format_rate(rate),
+            Style::default().fg(rate_color).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" msg/s", Style::default().fg(Color::DarkGray)),
+        Span::styled(" │ ", Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            format!("{}", app.stats.total_messages()),
+            Style::default().fg(Color::White),
+        ),
+        Span::styled(" total", Style::default().fg(Color::DarkGray)),
     ];
 
     if let Some(server) = app.active_server() {
-        header_parts.push(Span::raw(" │ "));
+        header_parts.push(Span::styled(" │ ", Style::default().fg(Color::DarkGray)));
         header_parts.push(Span::styled(
-            format!("Server: {}", server.name),
+            server.name.clone(),
             Style::default().fg(Color::Yellow),
         ));
     }
 
-    let header = Line::from(header_parts);
+    // Active filter indicator
+    if let Some(ref filter) = app.topic_filter {
+        header_parts.push(Span::styled(" │ ", Style::default().fg(Color::DarkGray)));
+        header_parts.push(Span::styled(
+            format!(" {} ", filter),
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
 
+    // Starred filter indicator
+    if app.filter_mode == crate::app::FilterMode::Starred {
+        header_parts.push(Span::styled(" │ ", Style::default().fg(Color::DarkGray)));
+        header_parts.push(Span::styled(
+            " ★ ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+
+    let header = Line::from(header_parts);
     frame.render_widget(Paragraph::new(header), area);
 }
 
 fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
-    let mode_hint = match app.input_mode {
+    let mode_hints: Vec<Span<'static>> = match app.input_mode {
         InputMode::Normal => {
-            "q:Quit /:Search f:Filter S:Servers P:Publish B:Bookmarks s:Star y:Copy m:Track ?:Help"
+            let mut hints = Vec::new();
+            hints.extend(key_hint("?", "Help"));
+            hints.extend(key_hint("/", "Search"));
+            hints.extend(key_hint("f", "Filter"));
+            hints.extend(key_hint("S", "Servers"));
+            hints.extend(key_hint("P", "Publish"));
+            hints.extend(key_hint("B", "Bookmarks"));
+            hints.extend(key_hint("s", "Star"));
+            hints.extend(key_hint("y", "Copy"));
+            hints.extend(key_hint("m", "Track"));
+            hints.extend(key_hint("q", "Quit"));
+            hints
         }
-        InputMode::Search => "Enter:Select  Esc:Cancel  ↑↓:Navigate results",
-        InputMode::MetricSelect => "Enter:Track  Esc:Cancel  ↑↓/jk:Navigate",
-        InputMode::Filter => "Enter:Apply  Esc:Cancel  (empty to clear)",
-        InputMode::ServerManager => "Enter:Activate  e:Edit  a:Add  d:Delete  Esc:Close",
-        InputMode::Publish => "Enter:Publish  Tab:Next field  Ctrl+S:Save Bookmark  Esc:Cancel",
-        InputMode::BookmarkManager => "Enter:Publish  e:Edit  a:Add  d:Delete  Esc:Close",
+        InputMode::Search => {
+            let mut hints = Vec::new();
+            hints.extend(key_hint("Enter", "Select"));
+            hints.extend(key_hint("↑↓", "Navigate"));
+            hints.extend(key_hint("Esc", "Cancel"));
+            hints
+        }
+        InputMode::MetricSelect => {
+            let mut hints = Vec::new();
+            hints.extend(key_hint("Enter", "Track"));
+            hints.extend(key_hint("↑↓", "Navigate"));
+            hints.extend(key_hint("Esc", "Cancel"));
+            hints
+        }
+        InputMode::Filter => {
+            let mut hints = Vec::new();
+            hints.extend(key_hint("Enter", "Apply"));
+            hints.extend(key_hint("Esc", "Cancel"));
+            hints
+        }
+        InputMode::ServerManager => {
+            let mut hints = Vec::new();
+            hints.extend(key_hint("Enter", "Connect"));
+            hints.extend(key_hint("e", "Edit"));
+            hints.extend(key_hint("a", "Add"));
+            hints.extend(key_hint("d", "Delete"));
+            hints.extend(key_hint("Esc", "Close"));
+            hints
+        }
+        InputMode::Publish => {
+            let mut hints = Vec::new();
+            hints.extend(key_hint("Enter", "Publish"));
+            hints.extend(key_hint("Tab", "Next"));
+            hints.extend(key_hint("^S", "Bookmark"));
+            hints.extend(key_hint("Esc", "Cancel"));
+            hints
+        }
+        InputMode::BookmarkManager => {
+            let mut hints = Vec::new();
+            hints.extend(key_hint("Enter", "Publish"));
+            hints.extend(key_hint("e", "Edit"));
+            hints.extend(key_hint("a", "Add"));
+            hints.extend(key_hint("d", "Delete"));
+            hints.extend(key_hint("Esc", "Close"));
+            hints
+        }
     };
 
     // Check for status message first
     if let Some(status) = app.get_status() {
-        let footer = Line::from(vec![
+        let mut parts = vec![
             Span::styled(
                 format!(" {} ", status),
                 Style::default()
-                    .fg(Color::Cyan)
+                    .fg(Color::Black)
+                    .bg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::raw("│ "),
-            Span::styled(mode_hint, Style::default().fg(Color::DarkGray)),
-        ]);
-        frame.render_widget(Paragraph::new(footer), area);
+            Span::raw(" "),
+        ];
+        parts.extend(mode_hints);
+        frame.render_widget(Paragraph::new(Line::from(parts)), area);
         return;
     }
 
     let footer = if let Some(ref err) = app.last_error {
-        Line::from(vec![
+        let mut parts = vec![
             Span::styled(
-                " ERROR: ",
-                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                " ERROR ",
+                Style::default()
+                    .fg(Color::White)
+                    .bg(Color::Red)
+                    .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(truncate_str(err, 50), Style::default().fg(Color::Red)),
-            Span::raw(" │ "),
-            Span::raw(mode_hint),
-        ])
+            Span::styled(
+                format!(" {} ", truncate_str(err, 40)),
+                Style::default().fg(Color::Red),
+            ),
+        ];
+        parts.extend(mode_hints);
+        Line::from(parts)
     } else {
-        Line::from(Span::styled(
-            format!(" {}", mode_hint),
-            Style::default().fg(Color::DarkGray),
-        ))
+        let mut parts = vec![Span::raw(" ")];
+        parts.extend(mode_hints);
+        Line::from(parts)
     };
 
     frame.render_widget(Paragraph::new(footer), area);

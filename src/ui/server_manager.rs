@@ -6,6 +6,7 @@ use ratatui::{
     Frame,
 };
 
+use super::widgets::{centered_rect, dialog_key_hint};
 use crate::app::{App, ServerField};
 
 pub fn render_server_manager(frame: &mut Frame, app: &App) {
@@ -89,19 +90,13 @@ pub fn render_server_manager(frame: &mut Frame, app: &App) {
     let list = List::new(items);
     frame.render_widget(list, chunks[1]);
 
-    let footer = Paragraph::new(Line::from(vec![
-        Span::styled("Enter", Style::default().fg(Color::Cyan)),
-        Span::raw(" activate  "),
-        Span::styled("e", Style::default().fg(Color::Cyan)),
-        Span::raw(" edit  "),
-        Span::styled("a", Style::default().fg(Color::Cyan)),
-        Span::raw(" add  "),
-        Span::styled("d", Style::default().fg(Color::Cyan)),
-        Span::raw(" delete  "),
-        Span::styled("Esc", Style::default().fg(Color::Cyan)),
-        Span::raw(" close"),
-    ]));
-    frame.render_widget(footer, chunks[2]);
+    let mut hints = Vec::new();
+    hints.extend(dialog_key_hint("Enter", "Connect"));
+    hints.extend(dialog_key_hint("e", "Edit"));
+    hints.extend(dialog_key_hint("a", "Add"));
+    hints.extend(dialog_key_hint("d", "Delete"));
+    hints.extend(dialog_key_hint("Esc", "Close"));
+    frame.render_widget(Paragraph::new(Line::from(hints)), chunks[2]);
 }
 
 fn render_server_edit(frame: &mut Frame, app: &App, area: Rect) {
@@ -183,33 +178,11 @@ fn render_server_edit(frame: &mut Frame, app: &App, area: Rect) {
     let list = List::new(items);
     frame.render_widget(list, chunks[1]);
 
-    let footer = Paragraph::new(Line::from(vec![
-        Span::styled("Esc", Style::default().fg(Color::Yellow)),
-        Span::raw(" cancel  "),
-        Span::styled("Tab", Style::default().fg(Color::Yellow)),
-        Span::raw(" next field  "),
-        Span::styled("Space", Style::default().fg(Color::Yellow)),
-        Span::raw(" toggle"),
-    ]));
-    frame.render_widget(footer, chunks[2]);
+    let mut hints = Vec::new();
+    hints.extend(dialog_key_hint("Enter", "Save"));
+    hints.extend(dialog_key_hint("Tab", "Next"));
+    hints.extend(dialog_key_hint("Space", "Toggle"));
+    hints.extend(dialog_key_hint("Esc", "Cancel"));
+    frame.render_widget(Paragraph::new(Line::from(hints)), chunks[2]);
 }
 
-fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(area);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
-}

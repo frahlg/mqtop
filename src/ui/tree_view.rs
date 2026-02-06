@@ -13,9 +13,17 @@ use crate::state::TopicInfo;
 
 pub fn render_tree(frame: &mut Frame, app: &mut App, area: Rect) {
     let focused = app.focused_panel == Panel::TopicTree;
+
+    // Build title with filter/star badges
     let title = match app.filter_mode {
-        FilterMode::All => "Topics",
-        FilterMode::Starred => "★ Starred",
+        FilterMode::All => {
+            if app.topic_filter.is_some() {
+                "Topics [filtered]"
+            } else {
+                "Topics"
+            }
+        }
+        FilterMode::Starred => "Topics [★]",
     };
     let block = bordered_block(title, focused);
     let inner = block.inner(area);
@@ -25,13 +33,18 @@ pub fn render_tree(frame: &mut Frame, app: &mut App, area: Rect) {
     let topics = app.get_visible_topics();
 
     if topics.is_empty() {
-        let empty_msg = Line::from(Span::styled(
-            "No topics yet...",
+        let empty_msg = if app.topic_filter.is_some() {
+            "No topics match filter"
+        } else {
+            "Waiting for messages..."
+        };
+        let text = Line::from(Span::styled(
+            empty_msg,
             Style::default()
                 .fg(Color::DarkGray)
                 .add_modifier(Modifier::ITALIC),
         ));
-        frame.render_widget(List::new(vec![ListItem::new(empty_msg)]), inner);
+        frame.render_widget(List::new(vec![ListItem::new(text)]), inner);
         return;
     }
 
@@ -48,13 +61,15 @@ pub fn render_tree(frame: &mut Frame, app: &mut App, area: Rect) {
     }
 
     let color_rules = &app.config.ui.topic_colors;
+    let now_ms = chrono::Utc::now().timestamp_millis();
+
     let items: Vec<ListItem> = topics
         .iter()
         .enumerate()
         .map(|(i, topic)| {
             let is_selected = i == app.selected_topic_index;
             let is_starred = app.is_starred(&topic.full_path);
-            create_topic_item(topic, is_selected, focused, is_starred, color_rules)
+            create_topic_item(topic, is_selected, focused, is_starred, color_rules, now_ms)
         })
         .collect();
 
@@ -81,6 +96,7 @@ fn create_topic_item(
     focused: bool,
     is_starred: bool,
     color_rules: &[TopicColorRule],
+    now_ms: i64,
 ) -> ListItem<'static> {
     let indent = "  ".repeat(topic.depth);
 
@@ -90,20 +106,34 @@ fn create_topic_item(
     // Determine icon based on topic type and state
     let icon = if topic.has_children {
         if topic.is_expanded {
-            "▼ "
+            "▾ "
         } else {
-            "▶ "
+            "▸ "
         }
     } else {
-        "  "
+        "· "
     };
+
+    // Activity indicator based on message recency
+    let activity = topic.last_message_time.map(|t| {
+        let age_ms = now_ms - t;
+        if age_ms < 1_000 {
+            ("●", Color::Green) // < 1 second ago: bright green
+        } else if age_ms < 5_000 {
+            ("●", Color::Yellow) // < 5 seconds: yellow
+        } else if age_ms < 30_000 {
+            ("○", Color::DarkGray) // < 30 seconds: fading
+        } else {
+            ("", Color::DarkGray) // older: no indicator
+        }
+    });
 
     // Color code by topic segment using config rules
     let segment_color = get_topic_color(&topic.segment, &topic.full_path, color_rules);
 
     // Format message count
     let count_str = if topic.message_count > 0 {
-        format!(" ({})", format_count(topic.message_count))
+        format!(" {}", format_count(topic.message_count))
     } else {
         String::new()
     };
@@ -116,15 +146,23 @@ fn create_topic_item(
         Style::default().fg(segment_color)
     };
 
-    let line = Line::from(vec![
+    let mut spans = vec![
         Span::raw(indent),
-        Span::styled(star, Style::default().fg(Color::Yellow)),
-        Span::styled(icon, Style::default().fg(Color::DarkGray)),
+        Span::styled(star.to_string(), Style::default().fg(Color::Yellow)),
+        Span::styled(icon.to_string(), Style::default().fg(Color::DarkGray)),
         Span::styled(topic.segment.clone(), style),
         Span::styled(count_str, Style::default().fg(Color::DarkGray)),
-    ]);
+    ];
 
-    ListItem::new(line)
+    // Add activity dot at the end
+    if let Some((indicator, color)) = activity {
+        if !indicator.is_empty() {
+            spans.push(Span::raw(" "));
+            spans.push(Span::styled(indicator.to_string(), Style::default().fg(color)));
+        }
+    }
+
+    ListItem::new(Line::from(spans))
 }
 
 /// Get color based on topic segment using configurable rules

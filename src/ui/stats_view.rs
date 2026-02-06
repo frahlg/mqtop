@@ -20,12 +20,9 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
     let mut lines = Vec::new();
 
     // Connection info
-    lines.push(Line::from(vec![Span::styled(
-        "Connection",
-        Style::default().add_modifier(Modifier::BOLD),
-    )]));
+    lines.push(stats_section("Connection"));
     lines.push(Line::from(vec![
-        Span::raw("  Status: "),
+        Span::styled("  Status  ", Style::default().fg(Color::DarkGray)),
         Span::styled(
             app.connection_status(),
             Style::default().fg(app.connection_color()),
@@ -33,33 +30,32 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
     ]));
     if let Some(server) = app.active_server() {
         lines.push(Line::from(vec![
-            Span::raw("  Host: "),
+            Span::styled("  Host    ", Style::default().fg(Color::DarkGray)),
             Span::styled(
                 format!("{}:{}", server.host, server.port),
                 Style::default().fg(Color::Cyan),
             ),
         ]));
         lines.push(Line::from(vec![
-            Span::raw("  Server: "),
+            Span::styled("  Server  ", Style::default().fg(Color::DarkGray)),
             Span::styled(server.name.clone(), Style::default().fg(Color::Yellow)),
         ]));
     }
     lines.push(Line::from(""));
 
     // Message stats
-    lines.push(Line::from(vec![Span::styled(
-        "Messages",
-        Style::default().add_modifier(Modifier::BOLD),
-    )]));
+    lines.push(stats_section("Messages"));
     lines.push(Line::from(vec![
-        Span::raw("  Total: "),
+        Span::styled("  Total   ", Style::default().fg(Color::DarkGray)),
         Span::styled(
             format_number(app.stats.total_messages()),
-            Style::default().fg(Color::White),
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
         ),
     ]));
     lines.push(Line::from(vec![
-        Span::raw("  Rate: "),
+        Span::styled("  Rate    ", Style::default().fg(Color::DarkGray)),
         Span::styled(
             Stats::format_rate(app.stats.messages_per_second()),
             Style::default().fg(Color::Green),
@@ -70,12 +66,7 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
     // Tracked Metrics section - placed high so it's always visible
     let metrics = app.metric_tracker.get_metrics();
     if !metrics.is_empty() {
-        lines.push(Line::from(vec![Span::styled(
-            "Tracked Metrics",
-            Style::default()
-                .add_modifier(Modifier::BOLD)
-                .fg(Color::Magenta),
-        )]));
+        lines.push(stats_section_colored("Tracked Metrics", Color::Magenta));
 
         for metric in metrics {
             // Metric label and current value
@@ -130,19 +121,16 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
     }
 
     // Data stats
-    lines.push(Line::from(vec![Span::styled(
-        "Data",
-        Style::default().add_modifier(Modifier::BOLD),
-    )]));
+    lines.push(stats_section("Data"));
     lines.push(Line::from(vec![
-        Span::raw("  Total: "),
+        Span::styled("  Total   ", Style::default().fg(Color::DarkGray)),
         Span::styled(
             Stats::format_bytes(app.stats.total_bytes()),
             Style::default().fg(Color::White),
         ),
     ]));
     lines.push(Line::from(vec![
-        Span::raw("  Rate: "),
+        Span::styled("  Rate    ", Style::default().fg(Color::DarkGray)),
         Span::styled(
             format!(
                 "{}/s",
@@ -154,38 +142,32 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
     lines.push(Line::from(""));
 
     // Topic stats
-    lines.push(Line::from(vec![Span::styled(
-        "Topics",
-        Style::default().add_modifier(Modifier::BOLD),
-    )]));
+    lines.push(stats_section("Topics"));
     lines.push(Line::from(vec![
-        Span::raw("  Unique: "),
+        Span::styled("  Unique  ", Style::default().fg(Color::DarkGray)),
         Span::styled(
             format_number(app.topic_tree.topic_count() as u64),
             Style::default().fg(Color::Cyan),
         ),
     ]));
     lines.push(Line::from(vec![
-        Span::raw("  Buffered: "),
+        Span::styled("  Buffered", Style::default().fg(Color::DarkGray)),
         Span::styled(
-            format_number(app.message_buffer.total_stored() as u64),
+            format!(" {}", format_number(app.message_buffer.total_stored() as u64)),
             Style::default().fg(Color::Yellow),
         ),
     ]));
     lines.push(Line::from(""));
 
     // Session info
-    lines.push(Line::from(vec![Span::styled(
-        "Session",
-        Style::default().add_modifier(Modifier::BOLD),
-    )]));
+    lines.push(stats_section("Session"));
     lines.push(Line::from(vec![
-        Span::raw("  Uptime: "),
+        Span::styled("  Uptime  ", Style::default().fg(Color::DarkGray)),
         Span::styled(app.stats.uptime_string(), Style::default().fg(Color::White)),
     ]));
     if let Some(server) = app.active_server() {
         lines.push(Line::from(vec![
-            Span::raw("  Client: "),
+            Span::styled("  Client  ", Style::default().fg(Color::DarkGray)),
             Span::styled(
                 server.client_id.clone(),
                 Style::default().fg(Color::DarkGray),
@@ -196,10 +178,7 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
     // Latency info
     if app.latency_tracker.inter_arrival_count > 0 {
         lines.push(Line::from(""));
-        lines.push(Line::from(vec![Span::styled(
-            "Latency",
-            Style::default().add_modifier(Modifier::BOLD),
-        )]));
+        lines.push(stats_section("Latency"));
 
         // Inter-arrival time (time between messages)
         if let Some(avg) = app.latency_tracker.avg_inter_arrival() {
@@ -267,12 +246,7 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
     let categories = &app.config.ui.topic_categories;
     if !categories.is_empty() {
         lines.push(Line::from(""));
-        lines.push(Line::from(vec![Span::styled(
-            "Categories",
-            Style::default()
-                .add_modifier(Modifier::BOLD)
-                .fg(Color::Cyan),
-        )]));
+        lines.push(stats_section_colored("Categories", Color::Cyan));
 
         let visible = app.get_visible_topics();
         for category in categories {
@@ -293,12 +267,7 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
     let device_count = app.device_tracker.device_count();
     if device_count > 0 {
         lines.push(Line::from(""));
-        lines.push(Line::from(vec![Span::styled(
-            "Device Health",
-            Style::default()
-                .add_modifier(Modifier::BOLD)
-                .fg(Color::Green),
-        )]));
+        lines.push(stats_section_colored("Device Health", Color::Green));
 
         let (healthy, warning, stale, unknown) = app.device_tracker.count_by_status();
         lines.push(Line::from(vec![
@@ -398,6 +367,22 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
     };
 
     frame.render_widget(paragraph, inner);
+}
+
+fn stats_section(title: &str) -> Line<'static> {
+    Line::from(vec![Span::styled(
+        format!("▸ {}", title),
+        Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD),
+    )])
+}
+
+fn stats_section_colored(title: &str, color: Color) -> Line<'static> {
+    Line::from(vec![Span::styled(
+        format!("▸ {}", title),
+        Style::default().fg(color).add_modifier(Modifier::BOLD),
+    )])
 }
 
 fn format_number(n: u64) -> String {

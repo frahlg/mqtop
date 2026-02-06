@@ -1,11 +1,15 @@
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
     Frame,
 };
 
+use super::widgets::{
+    centered_rect, dialog_key_hint, render_multiline_field, render_qos_field, render_retain_field,
+    render_text_field, truncate_safe,
+};
 use crate::app::{App, BookmarkField};
 
 pub fn render_bookmark_manager(frame: &mut Frame, app: &App) {
@@ -120,20 +124,14 @@ pub fn render_bookmark_manager(frame: &mut Frame, app: &App) {
     }
 
     // Help text
-    let help = Line::from(vec![
-        Span::styled("Enter", Style::default().fg(Color::Yellow)),
-        Span::raw(":Publish  "),
-        Span::styled("e", Style::default().fg(Color::Yellow)),
-        Span::raw(":Edit  "),
-        Span::styled("a", Style::default().fg(Color::Yellow)),
-        Span::raw(":Add  "),
-        Span::styled("d", Style::default().fg(Color::Yellow)),
-        Span::raw(":Delete  "),
-        Span::styled("Esc", Style::default().fg(Color::Yellow)),
-        Span::raw(":Close"),
-    ]);
+    let mut hints = Vec::new();
+    hints.extend(dialog_key_hint("Enter", "Publish"));
+    hints.extend(dialog_key_hint("e", "Edit"));
+    hints.extend(dialog_key_hint("a", "Add"));
+    hints.extend(dialog_key_hint("d", "Delete"));
+    hints.extend(dialog_key_hint("Esc", "Close"));
     frame.render_widget(
-        Paragraph::new(help).style(Style::default().fg(Color::DarkGray)),
+        Paragraph::new(Line::from(hints)),
         chunks[1],
     );
 }
@@ -238,233 +236,12 @@ fn render_bookmark_edit(frame: &mut Frame, app: &App) {
     );
 
     // Help text
-    let help = Line::from(vec![
-        Span::styled("Enter", Style::default().fg(Color::Yellow)),
-        Span::raw(": Save  "),
-        Span::styled("Tab", Style::default().fg(Color::Yellow)),
-        Span::raw(": Next  "),
-        Span::styled("Esc", Style::default().fg(Color::Yellow)),
-        Span::raw(": Cancel"),
-    ]);
+    let mut hints = Vec::new();
+    hints.extend(dialog_key_hint("Enter", "Save"));
+    hints.extend(dialog_key_hint("Tab", "Next"));
+    hints.extend(dialog_key_hint("Esc", "Cancel"));
     frame.render_widget(
-        Paragraph::new(help).style(Style::default().fg(Color::DarkGray)),
+        Paragraph::new(Line::from(hints)),
         chunks[5],
     );
-}
-
-fn render_text_field(
-    frame: &mut Frame,
-    label: &str,
-    value: &str,
-    cursor: usize,
-    focused: bool,
-    area: Rect,
-) {
-    let style = if focused {
-        Style::default().fg(Color::Cyan)
-    } else {
-        Style::default().fg(Color::DarkGray)
-    };
-
-    let block = Block::default()
-        .title(format!(" {} ", label))
-        .borders(Borders::ALL)
-        .border_style(style);
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    // Show cursor in value
-    let display_value = if focused {
-        let mut chars: Vec<char> = value.chars().collect();
-        let cursor_pos = cursor.min(chars.len());
-        chars.insert(cursor_pos, '|');
-        chars.into_iter().collect()
-    } else {
-        value.to_string()
-    };
-
-    let text = Paragraph::new(display_value).style(if focused {
-        Style::default().fg(Color::White)
-    } else {
-        Style::default().fg(Color::Gray)
-    });
-
-    frame.render_widget(text, inner);
-}
-
-fn render_multiline_field(
-    frame: &mut Frame,
-    label: &str,
-    value: &str,
-    cursor: usize,
-    focused: bool,
-    area: Rect,
-) {
-    let style = if focused {
-        Style::default().fg(Color::Cyan)
-    } else {
-        Style::default().fg(Color::DarkGray)
-    };
-
-    let block = Block::default()
-        .title(format!(" {} ", label))
-        .borders(Borders::ALL)
-        .border_style(style);
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    // Show cursor in value
-    let display_value = if focused {
-        let mut chars: Vec<char> = value.chars().collect();
-        let cursor_pos = cursor.min(chars.len());
-        chars.insert(cursor_pos, '|');
-        chars.into_iter().collect()
-    } else {
-        value.to_string()
-    };
-
-    let text = Paragraph::new(display_value)
-        .style(if focused {
-            Style::default().fg(Color::White)
-        } else {
-            Style::default().fg(Color::Gray)
-        })
-        .wrap(ratatui::widgets::Wrap { trim: false });
-
-    frame.render_widget(text, inner);
-}
-
-fn render_qos_field(frame: &mut Frame, qos: u8, focused: bool, area: Rect) {
-    let style = if focused {
-        Style::default().fg(Color::Cyan)
-    } else {
-        Style::default().fg(Color::DarkGray)
-    };
-
-    let block = Block::default()
-        .title(" QoS ")
-        .borders(Borders::ALL)
-        .border_style(style);
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    let qos_text = Line::from(vec![
-        Span::styled(
-            " [0] ",
-            if qos == 0 {
-                Style::default()
-                    .fg(Color::Green)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::DarkGray)
-            },
-        ),
-        Span::styled(
-            " [1] ",
-            if qos == 1 {
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::DarkGray)
-            },
-        ),
-        Span::styled(
-            " [2] ",
-            if qos == 2 {
-                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::DarkGray)
-            },
-        ),
-    ]);
-
-    let hint = if focused {
-        Line::from(Span::styled(
-            "Space/0/1/2",
-            Style::default().fg(Color::DarkGray),
-        ))
-    } else {
-        Line::from("")
-    };
-
-    let text = Paragraph::new(vec![qos_text, hint]);
-    frame.render_widget(text, inner);
-}
-
-fn render_retain_field(frame: &mut Frame, retain: bool, focused: bool, area: Rect) {
-    let style = if focused {
-        Style::default().fg(Color::Cyan)
-    } else {
-        Style::default().fg(Color::DarkGray)
-    };
-
-    let block = Block::default()
-        .title(" Retain ")
-        .borders(Borders::ALL)
-        .border_style(style);
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    let retain_text = if retain {
-        Line::from(Span::styled(
-            " [ON] ",
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD),
-        ))
-    } else {
-        Line::from(Span::styled(
-            " [OFF] ",
-            Style::default().fg(Color::DarkGray),
-        ))
-    };
-
-    let hint = if focused {
-        Line::from(Span::styled(
-            "Space to toggle",
-            Style::default().fg(Color::DarkGray),
-        ))
-    } else {
-        Line::from("")
-    };
-
-    let text = Paragraph::new(vec![retain_text, hint]);
-    frame.render_widget(text, inner);
-}
-
-/// Safely truncate a string at a valid UTF-8 character boundary
-fn truncate_safe(s: &str, max_bytes: usize) -> &str {
-    if s.len() <= max_bytes {
-        return s;
-    }
-    let mut end = max_bytes;
-    while end > 0 && !s.is_char_boundary(end) {
-        end -= 1;
-    }
-    &s[..end]
-}
-
-fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(area);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
 }

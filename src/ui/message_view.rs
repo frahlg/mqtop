@@ -7,6 +7,7 @@ use ratatui::{
 };
 
 use super::bordered_block;
+use super::widgets::truncate_safe;
 use crate::app::{App, Panel, PayloadMode};
 use crate::mqtt::MqttMessage;
 
@@ -99,14 +100,14 @@ fn render_message_list(frame: &mut Frame, app: &App, messages: &[&MqttMessage], 
 }
 
 fn create_message_item(msg: &MqttMessage, _is_selected: bool) -> ListItem<'static> {
-    let time = msg.timestamp.format("%H:%M:%S%.3f").to_string();
+    let time = msg.timestamp.format("%H:%M:%S").to_string();
 
-    // QoS color
-    let qos_color = match msg.qos {
-        0 => Color::Gray,
-        1 => Color::Yellow,
-        2 => Color::Green,
-        _ => Color::White,
+    // QoS indicator with color
+    let (qos_label, qos_color) = match msg.qos {
+        0 => ("Q0", Color::DarkGray),
+        1 => ("Q1", Color::Yellow),
+        2 => ("Q2", Color::Green),
+        _ => ("Q?", Color::White),
     };
 
     // Preview payload (first line, truncated)
@@ -114,28 +115,29 @@ fn create_message_item(msg: &MqttMessage, _is_selected: bool) -> ListItem<'stati
         .payload_str()
         .map(|s| {
             let first_line = s.lines().next().unwrap_or("");
-            if first_line.len() > 40 {
-                format!("{}...", truncate_safe(first_line, 40))
+            if first_line.len() > 50 {
+                format!("{}...", truncate_safe(first_line, 50))
             } else {
                 first_line.to_string()
             }
         })
         .unwrap_or_else(|| format!("<{} bytes binary>", msg.payload_size()));
 
-    let line = Line::from(vec![
+    let mut spans = vec![
         Span::styled(time, Style::default().fg(Color::DarkGray)),
+        Span::styled(" │ ", Style::default().fg(Color::DarkGray)),
+        Span::styled(qos_label.to_string(), Style::default().fg(qos_color)),
         Span::raw(" "),
-        Span::styled(format!("Q{}", msg.qos), Style::default().fg(qos_color)),
-        Span::raw(" "),
-        Span::styled(
-            format!("{}B", msg.payload_size()),
-            Style::default().fg(Color::DarkGray),
-        ),
-        Span::raw(" "),
-        Span::raw(preview),
-    ]);
+    ];
 
-    ListItem::new(line)
+    if msg.retain {
+        spans.push(Span::styled("R", Style::default().fg(Color::Yellow)));
+        spans.push(Span::raw(" "));
+    }
+
+    spans.push(Span::raw(preview));
+
+    ListItem::new(Line::from(spans))
 }
 
 fn render_payload_detail(frame: &mut Frame, app: &App, msg: &MqttMessage, area: Rect) {
@@ -314,14 +316,3 @@ fn truncate_topic(topic: &str, max_len: usize) -> String {
     }
 }
 
-/// Safely truncate a string at a valid UTF-8 character boundary
-fn truncate_safe(s: &str, max_bytes: usize) -> &str {
-    if s.len() <= max_bytes {
-        return s;
-    }
-    let mut end = max_bytes;
-    while end > 0 && !s.is_char_boundary(end) {
-        end -= 1;
-    }
-    &s[..end]
-}
