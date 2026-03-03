@@ -222,6 +222,30 @@ impl TopicTree {
         }
     }
 
+    /// Get all topic paths in the tree (sorted alphabetically), regardless of UI expansion state
+    pub fn get_all_topics(&self) -> Vec<String> {
+        let mut result = Vec::new();
+        self.collect_all_topics(&self.root, "", &mut result);
+        result.sort();
+        result
+    }
+
+    fn collect_all_topics(&self, node: &TopicNode, path: &str, result: &mut Vec<String>) {
+        for (segment, child) in &node.children {
+            let full_path = if path.is_empty() {
+                segment.clone()
+            } else {
+                format!("{}/{}", path, segment)
+            };
+
+            if child.is_topic {
+                result.push(full_path.clone());
+            }
+
+            self.collect_all_topics(child, &full_path, result);
+        }
+    }
+
     /// Clear all data
     pub fn clear(&mut self) {
         self.root = TopicNode::default();

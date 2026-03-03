@@ -53,6 +53,7 @@ pub fn render_help(frame: &mut Frame) {
         keybind("c", "Clear statistics"),
         Line::from(""),
         section("General"),
+        keybind("E", "Export all topics to file"),
         keybind("?", "Toggle this help"),
         keybind("q / Ctrl+C", "Quit"),
         Line::from(""),

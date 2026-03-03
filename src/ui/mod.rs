@@ -231,6 +231,7 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
             hints.extend(key_hint("S", "Servers"));
             hints.extend(key_hint("P", "Publish"));
             hints.extend(key_hint("B", "Bookmarks"));
+            hints.extend(key_hint("E", "Export"));
             hints.extend(key_hint("s", "Star"));
             hints.extend(key_hint("y", "Copy"));
             hints.extend(key_hint("m", "Track"));

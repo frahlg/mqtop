@@ -698,6 +698,51 @@ impl App {
         }
     }
 
+    /// Export all topics and their latest messages to a text file
+    pub fn export_topics(&mut self) {
+        let topics = self.topic_tree.get_all_topics();
+        if topics.is_empty() {
+            self.set_status("No topics to export");
+            return;
+        }
+
+        let now = chrono::Local::now();
+        let filename = format!("mqtop-export-{}.txt", now.format("%Y%m%d-%H%M%S"));
+
+        let mut output = String::new();
+        output.push_str(&format!(
+            "# mqtop export - {}\n",
+            now.format("%Y-%m-%d %H:%M:%S")
+        ));
+        output.push_str(&format!("# {} topics\n\n", topics.len()));
+
+        for topic in &topics {
+            output.push_str(&format!("--- {} ---\n", topic));
+            if let Some(msg) = self.message_buffer.get_latest(topic) {
+                match msg.payload_str() {
+                    Some(text) => {
+                        if let Some(pretty) = msg.payload_json_pretty() {
+                            output.push_str(&pretty);
+                        } else {
+                            output.push_str(text);
+                        }
+                    }
+                    None => {
+                        output.push_str(&format!("(binary {} bytes)", msg.payload_size()));
+                    }
+                }
+            } else {
+                output.push_str("(no message)");
+            }
+            output.push_str("\n\n");
+        }
+
+        match std::fs::write(&filename, &output) {
+            Ok(_) => self.set_status(&format!("Exported {} topics to {}", topics.len(), filename)),
+            Err(e) => self.set_status(&format!("Export failed: {}", e)),
+        }
+    }
+
     fn handle_filter_input(&mut self, code: KeyCode, _modifiers: KeyModifiers) {
         match code {
             KeyCode::Esc => {
@@ -1114,6 +1159,9 @@ impl App {
 
             // Open bookmark manager
             KeyCode::Char('B') => self.open_bookmark_manager(),
+
+            // Export topics to file
+            KeyCode::Char('E') => self.export_topics(),
 
             // Escape closes overlays
             KeyCode::Esc => {
