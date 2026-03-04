@@ -340,4 +340,36 @@ mod tests {
         let results = tree.search("TEMPERATURE");
         assert_eq!(results.len(), 1);
     }
+
+    #[test]
+    fn test_get_all_topics_empty_tree() {
+        let tree = TopicTree::new();
+        let topics = tree.get_all_topics();
+        assert!(topics.is_empty());
+    }
+
+    #[test]
+    fn test_get_all_topics_single() {
+        let mut tree = TopicTree::new();
+        tree.insert("sensors/temp", 10);
+
+        let topics = tree.get_all_topics();
+        assert_eq!(topics, vec!["sensors/temp"]);
+    }
+
+    #[test]
+    fn test_get_all_topics_nested() {
+        let mut tree = TopicTree::new();
+        tree.insert("a/b/c", 1);
+        tree.insert("a/b/d", 1);
+        tree.insert("a/e", 1);
+        tree.insert("x/y", 1);
+
+        let topics = tree.get_all_topics();
+        assert_eq!(topics, vec!["a/b/c", "a/b/d", "a/e", "x/y"]);
+
+        // Intermediate nodes without messages should not appear
+        assert!(!topics.contains(&"a".to_string()));
+        assert!(!topics.contains(&"a/b".to_string()));
+    }
 }

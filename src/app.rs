@@ -698,9 +698,20 @@ impl App {
         }
     }
 
-    /// Export all topics and their latest messages to a text file
+    /// Export topics and their latest messages to a text file.
+    /// Respects the active filter when one is set, exports all topics otherwise.
     pub fn export_topics(&mut self) {
-        let topics = self.topic_tree.get_all_topics();
+        let all_topics = self.topic_tree.get_all_topics();
+        let filter_active = self.topic_filter.is_some();
+        let topics: Vec<String> = if let Some(ref pattern) = self.topic_filter {
+            all_topics
+                .into_iter()
+                .filter(|t| topic_matches(pattern, t))
+                .collect()
+        } else {
+            all_topics
+        };
+
         if topics.is_empty() {
             self.set_status("No topics to export");
             return;
@@ -714,22 +725,25 @@ impl App {
             "# mqtop export - {}\n",
             now.format("%Y-%m-%d %H:%M:%S")
         ));
-        output.push_str(&format!("# {} topics\n\n", topics.len()));
+        if let Some(ref pattern) = self.topic_filter {
+            output.push_str(&format!(
+                "# {} topics (filter: {})\n\n",
+                topics.len(),
+                pattern
+            ));
+        } else {
+            output.push_str(&format!("# {} topics\n\n", topics.len()));
+        }
 
         for topic in &topics {
             output.push_str(&format!("--- {} ---\n", topic));
             if let Some(msg) = self.message_buffer.get_latest(topic) {
-                match msg.payload_str() {
-                    Some(text) => {
-                        if let Some(pretty) = msg.payload_json_pretty() {
-                            output.push_str(&pretty);
-                        } else {
-                            output.push_str(text);
-                        }
-                    }
-                    None => {
-                        output.push_str(&format!("(binary {} bytes)", msg.payload_size()));
-                    }
+                if let Some(pretty) = msg.payload_json_pretty() {
+                    output.push_str(&pretty);
+                } else if let Some(text) = msg.payload_str() {
+                    output.push_str(text);
+                } else {
+                    output.push_str(&format!("(binary {} bytes)", msg.payload_size()));
                 }
             } else {
                 output.push_str("(no message)");
@@ -737,8 +751,14 @@ impl App {
             output.push_str("\n\n");
         }
 
+        let status_filter = if filter_active { " (filtered)" } else { "" };
         match std::fs::write(&filename, &output) {
-            Ok(_) => self.set_status(&format!("Exported {} topics to {}", topics.len(), filename)),
+            Ok(_) => self.set_status(&format!(
+                "Exported {} topics{} to {}",
+                topics.len(),
+                status_filter,
+                filename
+            )),
             Err(e) => self.set_status(&format!("Export failed: {}", e)),
         }
     }
