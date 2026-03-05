@@ -102,6 +102,59 @@ keep_alive_secs = 30
 # lwt_qos = 1
 # lwt_retain = true
 
+[nats]
+# ============================================================================
+# NATS Server Connections
+# ============================================================================
+
+# Active server name (must match a server below)
+# Leave empty if you only use MQTT
+active_server = ""
+
+[[nats.servers]]
+# Unique name for this server
+name = "nats-default"
+
+# NATS server hostname
+host = "nats.example.com"
+
+# NATS server port (typically 4222 for plain, 4222/4443 for TLS depending on deployment)
+port = 4222
+
+# Enable TLS
+use_tls = false
+
+# Skip TLS certificate verification (INSECURE - for testing only!)
+# tls_insecure = false
+
+# ============================================================================
+# Authentication (Optional)
+# ============================================================================
+
+# Username for user/pass auth
+# username = "your-username"
+
+# Token for token auth or password for user/pass auth
+# token = "your-token-or-password"
+
+# Optional NATS creds file (JWT/NKey) - currently unsupported by built-in client
+# creds_file = "/path/to/user.creds"
+
+# ============================================================================
+# Subscription
+# ============================================================================
+
+# Subject pattern to subscribe to
+# Supports NATS wildcards:
+#   > = multi-level wildcard (matches one or more trailing tokens)
+#   * = single-token wildcard
+#
+# Examples:
+#   ">"                    - All subjects
+#   "telemetry.>"          - All telemetry subjects
+#   "telemetry.*.meter"    - Meter updates from any device
+subscribe_subject = ">"
+
 [ui]
 # ============================================================================
 # User Interface Settings

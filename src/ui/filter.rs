@@ -14,8 +14,14 @@ pub fn render_filter(frame: &mut Frame, app: &App) {
 
     frame.render_widget(Clear, area);
 
+    let broker = app.connected_broker_kind;
+    let single_wc = broker.wildcard_single();
+    let multi_wc = broker.wildcard_multi();
+    let sep = broker.topic_separator();
+    let hint = broker.filter_title_hint();
+
     let block = Block::default()
-        .title(" Topic Filter (MQTT wildcards: + # ) ")
+        .title(" Topic Filter ")
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Yellow))
         .style(Style::default().bg(Color::Black));
@@ -36,10 +42,12 @@ pub fn render_filter(frame: &mut Frame, app: &App) {
     // Instructions
     let instructions = Paragraph::new(Line::from(vec![
         Span::raw("Enter pattern: "),
-        Span::styled("+", Style::default().fg(Color::Cyan)),
+        Span::styled(single_wc.to_string(), Style::default().fg(Color::Cyan)),
         Span::raw(" = single level, "),
-        Span::styled("#", Style::default().fg(Color::Cyan)),
+        Span::styled(multi_wc.to_string(), Style::default().fg(Color::Cyan)),
         Span::raw(" = multi-level"),
+        Span::raw("  "),
+        Span::styled(format!("({})", hint), Style::default().fg(Color::DarkGray)),
     ]));
     frame.render_widget(instructions, chunks[0]);
 
@@ -64,15 +72,24 @@ pub fn render_filter(frame: &mut Frame, app: &App) {
             Style::default().fg(Color::DarkGray),
         )]),
         Line::from(vec![
-            Span::styled("  telemetry/#       ", Style::default().fg(Color::Cyan)),
+            Span::styled(
+                format!("  telemetry{}{}       ", sep, multi_wc),
+                Style::default().fg(Color::Cyan),
+            ),
             Span::styled("All telemetry", Style::default().fg(Color::DarkGray)),
         ]),
         Line::from(vec![
-            Span::styled("  telemetry/+/meter ", Style::default().fg(Color::Cyan)),
+            Span::styled(
+                format!("  telemetry{}{}{}meter ", sep, single_wc, sep),
+                Style::default().fg(Color::Cyan),
+            ),
             Span::styled("Any device's meter", Style::default().fg(Color::DarkGray)),
         ]),
         Line::from(vec![
-            Span::styled("  sites/+/devices/# ", Style::default().fg(Color::Cyan)),
+            Span::styled(
+                format!("  sites{}{}{}devices{}{} ", sep, single_wc, sep, sep, multi_wc),
+                Style::default().fg(Color::Cyan),
+            ),
             Span::styled("All site devices", Style::default().fg(Color::DarkGray)),
         ]),
     ]);

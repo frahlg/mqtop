@@ -1,6 +1,8 @@
 mod app;
+mod broker;
 mod config;
 mod mqtt;
+mod nats;
 mod persistence;
 mod state;
 mod ui;
@@ -22,8 +24,10 @@ use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
 use app::App;
-use config::{Config, MqttConfig, MqttServerConfig, CONFIG_BACKUP_LIMIT};
+use broker::BrokerKind;
+use config::{Config, MqttConfig, MqttServerConfig, NatsConfig, CONFIG_BACKUP_LIMIT};
 use mqtt::{MqttClient, MqttEvent};
+use nats::NatsClient;
 
 const DEFAULT_WIZARD_PORT: u16 = 1883;
 const DEFAULT_WIZARD_KEEP_ALIVE: u64 = 30;
@@ -80,6 +84,7 @@ fn create_default_config(config_path: &std::path::Path) -> Result<Config> {
             active_server: String::new(),
             servers: Vec::new(),
         },
+        nats: NatsConfig::default(),
         ui: config::UiConfig::default(),
     };
 
@@ -158,6 +163,7 @@ fn run_config_wizard(config_path: &PathBuf) -> Result<Config> {
             active_server: server.name.clone(),
             servers: vec![server],
         },
+        nats: NatsConfig::default(),
         ui: config::UiConfig::default(),
     };
 
@@ -168,12 +174,61 @@ fn run_config_wizard(config_path: &PathBuf) -> Result<Config> {
 
 async fn connect_mqtt(app: &App, mqtt_tx: mpsc::UnboundedSender<MqttEvent>) -> Result<MqttClient> {
     let server = app
-        .active_server()
+        .active_mqtt_server()
         .context("Active MQTT server missing")?
         .clone();
     MqttClient::connect(server, mqtt_tx)
         .await
         .context("Failed to connect to MQTT broker")
+}
+
+enum Client {
+    Mqtt(MqttClient),
+    Nats(NatsClient),
+}
+
+impl Client {
+    async fn publish(&self, topic: &str, payload: &[u8], qos: u8, retain: bool) -> Result<()> {
+        match self {
+            Client::Mqtt(client) => {
+                let qos = match qos {
+                    0 => rumqttc::QoS::AtMostOnce,
+                    1 => rumqttc::QoS::AtLeastOnce,
+                    _ => rumqttc::QoS::ExactlyOnce,
+                };
+                client.publish(topic, payload, qos, retain).await
+            }
+            Client::Nats(client) => client.publish(topic, payload).await,
+        }
+    }
+
+    async fn disconnect(&self) -> Result<()> {
+        match self {
+            Client::Mqtt(client) => client.disconnect().await,
+            Client::Nats(client) => client.disconnect().await,
+        }
+    }
+}
+
+async fn connect_client(
+    app: &App,
+    kind: BrokerKind,
+    tx: mpsc::UnboundedSender<MqttEvent>,
+) -> Result<Client> {
+    match kind {
+        BrokerKind::Mqtt => Ok(Client::Mqtt(connect_mqtt(app, tx).await?)),
+        BrokerKind::Nats => {
+            let server = app
+                .active_nats_server()
+                .context("Active NATS server missing")?
+                .clone();
+            Ok(Client::Nats(
+                NatsClient::connect(server, tx)
+                    .await
+                    .context("Failed to connect to NATS server")?,
+            ))
+        }
+    }
 }
 
 #[derive(Parser, Debug)]
@@ -285,8 +340,7 @@ async fn main() -> Result<()> {
     };
 
     // Check if we have servers configured
-    let needs_server_setup =
-        config.mqtt.servers.is_empty() || config.mqtt.active_server().is_none();
+    let needs_server_setup = config.mqtt.servers.is_empty() && config.nats.servers.is_empty();
 
     // Override config with CLI args (active server only)
     if let Some(server) = config.mqtt.active_server_mut() {
@@ -321,7 +375,10 @@ async fn main() -> Result<()> {
 
         if let Some(active) = config.mqtt.active_server() {
             info!("Starting mqtop");
-            info!("Connecting to {}:{}", active.host, active.port);
+            info!("Configured MQTT server {}:{} ({})", active.host, active.port, active.name);
+        } else if let Some(active) = config.nats.active_server() {
+            info!("Starting mqtop");
+            info!("Configured NATS server {}:{} ({})", active.host, active.port, active.name);
         }
     } else {
         info!("Starting mqtop - no servers configured");
@@ -343,12 +400,12 @@ async fn run_app(config: Config, config_path: PathBuf, needs_server_setup: bool)
     let tick_rate = Duration::from_millis(config.ui.tick_rate_ms);
     let mut app = App::new(config.clone(), config_path);
 
-    // Create channel for MQTT events
+    // Create channel for broker events (MQTT/NATS)
     let (mqtt_tx, mut mqtt_rx) = mpsc::unbounded_channel::<MqttEvent>();
 
     // Never auto-connect - always start with Server Manager open
     // User must explicitly select a server (Enter) to connect
-    let mut mqtt_client: Option<MqttClient> = None;
+    let mut client: Option<Client> = None;
     app.open_server_manager();
     if needs_server_setup {
         app.set_status("No servers configured - press 'a' to add one");
@@ -364,7 +421,7 @@ async fn run_app(config: Config, config_path: PathBuf, needs_server_setup: bool)
         // Handle events with timeout
         let timeout = tick_rate;
 
-        // Check for MQTT events (non-blocking)
+        // Check for broker events (non-blocking)
         while let Ok(event) = mqtt_rx.try_recv() {
             app.handle_mqtt_event(event);
         }
@@ -378,27 +435,22 @@ async fn run_app(config: Config, config_path: PathBuf, needs_server_setup: bool)
             }
         }
 
-        if let Some(index) = app.pending_server_switch.take() {
+        if let Some(switch) = app.pending_server_switch.take() {
             // Disconnect existing client if any
-            if let Some(ref client) = mqtt_client {
+            if let Some(ref client) = client {
                 if let Err(err) = client.disconnect().await {
-                    tracing::warn!("Failed to disconnect MQTT client: {:?}", err);
+                    tracing::warn!("Failed to disconnect client: {:?}", err);
                 }
             }
-            app.reset_for_server_switch(index)?;
-            mqtt_client = Some(connect_mqtt(&app, mqtt_tx.clone()).await?);
+            app.reset_for_server_switch(switch.kind, switch.index)?;
+            client = Some(connect_client(&app, switch.kind, mqtt_tx.clone()).await?);
         }
 
         // Handle pending publish
         if let Some(publish) = app.pending_publish.take() {
-            if let Some(ref client) = mqtt_client {
-                let qos = match publish.qos {
-                    0 => rumqttc::QoS::AtMostOnce,
-                    1 => rumqttc::QoS::AtLeastOnce,
-                    _ => rumqttc::QoS::ExactlyOnce,
-                };
+            if let Some(ref client) = client {
                 match client
-                    .publish(&publish.topic, &publish.payload, qos, publish.retain)
+                    .publish(&publish.topic, &publish.payload, publish.qos, publish.retain)
                     .await
                 {
                     Ok(()) => {

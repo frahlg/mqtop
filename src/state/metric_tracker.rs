@@ -147,22 +147,38 @@ impl MetricTracker {
     }
 }
 
-/// Check if a topic matches a pattern (supports + and # wildcards)
+/// Check if a topic matches a pattern.
+///
+/// Supports both MQTT and NATS wildcard semantics:
+/// - Single level: `+` (MQTT) or `*` (NATS)
+/// - Multi level: `#` (MQTT) or `>` (NATS)
 pub fn topic_matches(pattern: &str, topic: &str) -> bool {
-    if pattern == "#" {
+    if pattern == "#" || pattern == ">" {
         return true;
     }
 
-    let pattern_parts: Vec<&str> = pattern.split('/').collect();
-    let topic_parts: Vec<&str> = topic.split('/').collect();
+    let separator = if pattern.contains('/') {
+        '/'
+    } else if pattern.contains('.') {
+        '.'
+    } else if topic.contains('/') {
+        '/'
+    } else if topic.contains('.') {
+        '.'
+    } else {
+        '/'
+    };
+
+    let pattern_parts: Vec<&str> = pattern.split(separator).collect();
+    let topic_parts: Vec<&str> = topic.split(separator).collect();
 
     let mut pi = 0;
     let mut ti = 0;
 
     while pi < pattern_parts.len() && ti < topic_parts.len() {
         match pattern_parts[pi] {
-            "#" => return true, // # matches everything after
-            "+" => {
+            "#" | ">" => return true, // multi-level wildcard matches everything after
+            "+" | "*" => {
                 // + matches single level
                 pi += 1;
                 ti += 1;
@@ -173,6 +189,11 @@ pub fn topic_matches(pattern: &str, topic: &str) -> bool {
             }
             _ => return false,
         }
+    }
+
+    // Allow trailing multi-level wildcard to match zero segments (e.g. "telemetry/#" vs "telemetry")
+    if pi + 1 == pattern_parts.len() && matches!(pattern_parts[pi], "#" | ">") {
+        return true;
     }
 
     pi == pattern_parts.len() && ti == topic_parts.len()
@@ -273,6 +294,14 @@ mod tests {
         ));
         assert!(topic_matches("exact/match", "exact/match"));
         assert!(!topic_matches("exact/match", "exact/other"));
+
+        // NATS-style patterns
+        assert!(topic_matches(">", "any.subject.here"));
+        assert!(topic_matches("telemetry.>", "telemetry.device.sensor"));
+        assert!(topic_matches("telemetry.*.sensor", "telemetry.device1.sensor"));
+        assert!(!topic_matches("telemetry.*.sensor", "telemetry.device1.other"));
+        assert!(topic_matches("exact.match", "exact.match"));
+        assert!(!topic_matches("exact.match", "exact.other"));
     }
 
     #[test]

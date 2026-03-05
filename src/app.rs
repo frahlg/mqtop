@@ -6,7 +6,8 @@ use std::path::PathBuf;
 use anyhow::{anyhow, Context, Result};
 use crossterm::event::{KeyCode, KeyModifiers};
 
-use crate::config::{Config, MqttServerConfig, CONFIG_BACKUP_LIMIT};
+use crate::broker::BrokerKind;
+use crate::config::{Config, MqttServerConfig, NatsServerConfig, CONFIG_BACKUP_LIMIT};
 use crate::mqtt::{ConnectionState, MqttEvent, MqttMessage};
 use crate::persistence::{Bookmark, UserData};
 use crate::state::metric_tracker::topic_matches;
@@ -40,6 +41,20 @@ pub enum InputMode {
 pub enum FilterMode {
     All,
     Starred,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PendingServerSwitch {
+    pub kind: BrokerKind,
+    pub index: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct ActiveServerInfo {
+    pub kind: BrokerKind,
+    pub name: String,
+    pub host: String,
+    pub port: u16,
 }
 
 /// Application state
@@ -115,11 +130,17 @@ pub struct App {
     /// Filter input buffer
     pub filter_input: String,
     /// Pending server switch selection
-    pub pending_server_switch: Option<usize>,
+    pub pending_server_switch: Option<PendingServerSwitch>,
     /// Server manager selection index
     pub server_manager_index: usize,
+    /// Which protocol tab is active in the Server Manager
+    pub server_manager_kind: BrokerKind,
+    /// Which protocol we're currently connected to (drives topic tree delimiter, UI hints, etc.)
+    pub connected_broker_kind: BrokerKind,
     /// Server edit buffer
     pub server_edit: ServerEditState,
+    /// NATS server edit buffer
+    pub nats_server_edit: NatsServerEditState,
     /// Publish edit buffer
     pub publish_edit: PublishEditState,
     /// Pending publish to send
@@ -162,6 +183,43 @@ pub struct ServerEditState {
     pub lwt_payload: String,
     pub lwt_qos: String,
     pub lwt_retain: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct NatsServerEditState {
+    pub active: bool,
+    pub is_new: bool,
+    pub index: usize,
+    pub field: NatsServerField,
+    pub cursor: usize,
+    // Basic connection
+    pub name: String,
+    pub host: String,
+    pub port: String,
+    // TLS
+    pub use_tls: bool,
+    pub ca_cert: String,
+    pub tls_insecure: bool,
+    // Auth
+    pub username: String,
+    pub token: String,
+    pub creds_file: String,
+    // Subscription
+    pub subscribe_subject: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NatsServerField {
+    Name,
+    Host,
+    Port,
+    UseTls,
+    CaCert,
+    TlsInsecure,
+    Username,
+    Token,
+    CredsFile,
+    SubscribeSubject,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -231,6 +289,28 @@ impl Default for ServerEditState {
             lwt_payload: String::new(),
             lwt_qos: String::new(),
             lwt_retain: false,
+        }
+    }
+}
+
+impl Default for NatsServerEditState {
+    fn default() -> Self {
+        Self {
+            active: false,
+            is_new: false,
+            index: 0,
+            field: NatsServerField::Name,
+            cursor: 0,
+            name: String::new(),
+            host: String::new(),
+            port: String::new(),
+            use_tls: false,
+            ca_cert: String::new(),
+            tls_insecure: false,
+            username: String::new(),
+            token: String::new(),
+            creds_file: String::new(),
+            subscribe_subject: String::new(),
         }
     }
 }
@@ -437,6 +517,40 @@ impl ServerField {
     }
 }
 
+impl NatsServerField {
+    pub const ALL: [NatsServerField; 10] = [
+        NatsServerField::Name,
+        NatsServerField::Host,
+        NatsServerField::Port,
+        NatsServerField::UseTls,
+        NatsServerField::CaCert,
+        NatsServerField::TlsInsecure,
+        NatsServerField::Username,
+        NatsServerField::Token,
+        NatsServerField::CredsFile,
+        NatsServerField::SubscribeSubject,
+    ];
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            NatsServerField::Name => "Name",
+            NatsServerField::Host => "Host",
+            NatsServerField::Port => "Port",
+            NatsServerField::UseTls => "TLS",
+            NatsServerField::CaCert => "CA Cert",
+            NatsServerField::TlsInsecure => "TLS Insecure",
+            NatsServerField::Username => "Username",
+            NatsServerField::Token => "Token",
+            NatsServerField::CredsFile => "Creds",
+            NatsServerField::SubscribeSubject => "Subscribe",
+        }
+    }
+
+    pub fn is_checkbox(&self) -> bool {
+        matches!(self, NatsServerField::UseTls | NatsServerField::TlsInsecure)
+    }
+}
+
 impl App {
     pub fn new(config: Config, config_path: PathBuf) -> Self {
         let message_buffer_size = config.ui.message_buffer_size;
@@ -481,7 +595,10 @@ impl App {
             filter_input: String::new(),
             pending_server_switch: None,
             server_manager_index: 0,
+            server_manager_kind: BrokerKind::Mqtt,
+            connected_broker_kind: BrokerKind::Mqtt,
             server_edit: ServerEditState::default(),
+            nats_server_edit: NatsServerEditState::default(),
             publish_edit: PublishEditState::default(),
             pending_publish: None,
             bookmark_manager: BookmarkManagerState::default(),
@@ -605,8 +722,10 @@ impl App {
                     if let Some(topic) = &self.selected_topic {
                         // Create a wildcard pattern to match similar topics
                         // e.g., telemetry/device123/meter/zap/json -> telemetry/+/meter/+/json
-                        let pattern = create_wildcard_pattern(topic);
-                        let label = format!("{} ({})", field, short_topic(topic));
+                        let sep = self.topic_tree.separator();
+                        let pattern =
+                            create_wildcard_pattern(topic, sep, self.connected_broker_kind.wildcard_single());
+                        let label = format!("{} ({})", field, short_topic(topic, sep));
                         self.metric_tracker
                             .track(label.clone(), pattern, field.clone());
                         self.set_status(&format!("Tracking: {}", field));
@@ -801,8 +920,16 @@ impl App {
 
     pub fn open_server_manager(&mut self) {
         self.input_mode = InputMode::ServerManager;
-        self.server_manager_index = self.config.mqtt.active_index().unwrap_or_default();
+        // Default to the first non-empty protocol list for a smoother first-run experience.
+        if self.config.mqtt.servers.is_empty() && !self.config.nats.servers.is_empty() {
+            self.server_manager_kind = BrokerKind::Nats;
+            self.server_manager_index = self.config.nats.active_index().unwrap_or_default();
+        } else {
+            self.server_manager_kind = BrokerKind::Mqtt;
+            self.server_manager_index = self.config.mqtt.active_index().unwrap_or_default();
+        }
         self.server_edit.active = false;
+        self.nats_server_edit.active = false;
         self.set_status("Server manager");
     }
 
@@ -1442,12 +1569,13 @@ impl App {
 
     fn expand_to_topic(&mut self, topic: &str) {
         // Expand all parent topics
-        let parts: Vec<&str> = topic.split('/').collect();
+        let sep = self.topic_tree.separator();
+        let parts: Vec<&str> = topic.split(sep).collect();
         let mut path = String::new();
 
         for (i, part) in parts.iter().enumerate() {
             if i > 0 {
-                path.push('/');
+                path.push(sep);
             }
             path.push_str(part);
 
@@ -1490,24 +1618,63 @@ impl App {
         }
     }
 
-    pub fn active_server(&self) -> Option<&MqttServerConfig> {
+    pub fn active_mqtt_server(&self) -> Option<&MqttServerConfig> {
         self.config.mqtt.active_server()
     }
 
-    pub fn reset_for_server_switch(&mut self, server_index: usize) -> Result<()> {
-        let server = self
-            .config
-            .mqtt
-            .servers
-            .get(server_index)
-            .context("Server index out of range")?
-            .name
-            .clone();
+    pub fn active_nats_server(&self) -> Option<&NatsServerConfig> {
+        self.config.nats.active_server()
+    }
 
-        self.config.mqtt.active_server = server.clone();
+    pub fn active_server_info(&self) -> Option<ActiveServerInfo> {
+        match self.connected_broker_kind {
+            BrokerKind::Mqtt => self.active_mqtt_server().map(|s| ActiveServerInfo {
+                kind: BrokerKind::Mqtt,
+                name: s.name.clone(),
+                host: s.host.clone(),
+                port: s.port,
+            }),
+            BrokerKind::Nats => self.active_nats_server().map(|s| ActiveServerInfo {
+                kind: BrokerKind::Nats,
+                name: s.name.clone(),
+                host: s.host.clone(),
+                port: s.port,
+            }),
+        }
+    }
+
+    pub fn reset_for_server_switch(&mut self, kind: BrokerKind, server_index: usize) -> Result<()> {
+        let server = match kind {
+            BrokerKind::Mqtt => self
+                .config
+                .mqtt
+                .servers
+                .get(server_index)
+                .context("Server index out of range")?
+                .name
+                .clone(),
+            BrokerKind::Nats => self
+                .config
+                .nats
+                .servers
+                .get(server_index)
+                .context("Server index out of range")?
+                .name
+                .clone(),
+        };
+
+        match kind {
+            BrokerKind::Mqtt => {
+                self.config.mqtt.active_server = server.clone();
+            }
+            BrokerKind::Nats => {
+                self.config.nats.active_server = server.clone();
+            }
+        }
         self.save_config()?;
 
-        self.topic_tree.clear();
+        self.connected_broker_kind = kind;
+        self.topic_tree = TopicTree::with_separator(kind.topic_separator());
         self.message_buffer.clear();
         self.stats.reset();
         self.metric_tracker = MetricTracker::new(100);
@@ -1522,7 +1689,7 @@ impl App {
         self.message_scroll = 0;
         self.tree_scroll = 0;
 
-        self.set_status(&format!("Switched to {}", server));
+        self.set_status(&format!("Switched to {} ({})", server, kind.label()));
         Ok(())
     }
 
@@ -1531,13 +1698,24 @@ impl App {
             self.handle_server_edit_input(code);
             return;
         }
+        if self.nats_server_edit.active {
+            self.handle_nats_server_edit_input(code);
+            return;
+        }
 
         match code {
             KeyCode::Esc => {
                 self.input_mode = InputMode::Normal;
             }
+            KeyCode::Tab => {
+                self.toggle_server_manager_kind();
+            }
             KeyCode::Down | KeyCode::Char('j') => {
-                if self.server_manager_index + 1 < self.config.mqtt.servers.len() {
+                let len = match self.server_manager_kind {
+                    BrokerKind::Mqtt => self.config.mqtt.servers.len(),
+                    BrokerKind::Nats => self.config.nats.servers.len(),
+                };
+                if self.server_manager_index + 1 < len {
                     self.server_manager_index += 1;
                 }
             }
@@ -1547,24 +1725,60 @@ impl App {
                 }
             }
             KeyCode::Char('a') => {
-                self.start_server_edit(None);
+                match self.server_manager_kind {
+                    BrokerKind::Mqtt => self.start_server_edit(None),
+                    BrokerKind::Nats => self.start_nats_server_edit(None),
+                }
             }
             KeyCode::Char('e') => {
-                if !self.config.mqtt.servers.is_empty() {
-                    let index = self
-                        .server_manager_index
-                        .min(self.config.mqtt.servers.len() - 1);
-                    self.start_server_edit(Some(index));
+                match self.server_manager_kind {
+                    BrokerKind::Mqtt => {
+                        if !self.config.mqtt.servers.is_empty() {
+                            let index = self
+                                .server_manager_index
+                                .min(self.config.mqtt.servers.len() - 1);
+                            self.start_server_edit(Some(index));
+                        }
+                    }
+                    BrokerKind::Nats => {
+                        if !self.config.nats.servers.is_empty() {
+                            let index = self
+                                .server_manager_index
+                                .min(self.config.nats.servers.len() - 1);
+                            self.start_nats_server_edit(Some(index));
+                        }
+                    }
                 }
             }
             KeyCode::Enter => {
                 // Activate server and close the window
-                if let Some(server) = self.config.mqtt.servers.get(self.server_manager_index) {
-                    self.config.mqtt.active_server = server.name.clone();
+                let server_name = match self.server_manager_kind {
+                    BrokerKind::Mqtt => self
+                        .config
+                        .mqtt
+                        .servers
+                        .get(self.server_manager_index)
+                        .map(|s| s.name.clone()),
+                    BrokerKind::Nats => self
+                        .config
+                        .nats
+                        .servers
+                        .get(self.server_manager_index)
+                        .map(|s| s.name.clone()),
+                };
+
+                if let Some(name) = server_name {
+                    match self.server_manager_kind {
+                        BrokerKind::Mqtt => self.config.mqtt.active_server = name,
+                        BrokerKind::Nats => self.config.nats.active_server = name,
+                    }
                     if let Err(err) = self.save_config() {
                         self.set_status(&format!("Save failed: {}", err));
                     } else {
-                        self.pending_server_switch = Some(self.server_manager_index);
+                        self.pending_server_switch = Some(PendingServerSwitch {
+                            kind: self.server_manager_kind,
+                            index: self.server_manager_index,
+                        });
                         self.input_mode = InputMode::Normal;
                     }
                 }
@@ -1577,36 +1791,152 @@ impl App {
                 }
             }
             KeyCode::Char('d') => {
-                if self.config.mqtt.servers.len() <= 1 {
-                    self.set_status("Cannot delete last server");
-                } else if let Some(server) = self.config.mqtt.servers.get(self.server_manager_index)
-                {
-                    let name = server.name.clone();
-                    let was_active = self.config.mqtt.active_server == name;
-                    self.config.mqtt.servers.remove(self.server_manager_index);
-                    if was_active {
-                        self.config.mqtt.active_server = self
-                            .config
-                            .mqtt
-                            .servers
-                            .first()
-                            .map(|s| s.name.clone())
-                            .unwrap_or_default();
-                    }
-                    self.server_manager_index = self
-                        .server_manager_index
-                        .min(self.config.mqtt.servers.len().saturating_sub(1));
-                    if let Err(err) = self.save_config() {
-                        self.set_status(&format!("Save failed: {}", err));
-                    } else {
-                        if was_active {
-                            self.pending_server_switch = self.config.mqtt.active_index();
-                        }
-                        self.set_status("Server deleted");
-                    }
-                }
+                self.delete_selected_server();
             }
             _ => {}
+        }
+    }
+
+    fn toggle_server_manager_kind(&mut self) {
+        self.server_manager_kind = match self.server_manager_kind {
+            BrokerKind::Mqtt => BrokerKind::Nats,
+            BrokerKind::Nats => BrokerKind::Mqtt,
+        };
+
+        self.server_manager_index = match self.server_manager_kind {
+            BrokerKind::Mqtt => self.config.mqtt.active_index().unwrap_or_default(),
+            BrokerKind::Nats => self.config.nats.active_index().unwrap_or_default(),
+        };
+
+        let len = match self.server_manager_kind {
+            BrokerKind::Mqtt => self.config.mqtt.servers.len(),
+            BrokerKind::Nats => self.config.nats.servers.len(),
+        };
+        if len == 0 {
+            self.server_manager_index = 0;
+        } else {
+            self.server_manager_index = self.server_manager_index.min(len - 1);
+        }
+
+        self.set_status(&format!("Server manager: {}", self.server_manager_kind.label()));
+    }
+
+    fn delete_selected_server(&mut self) {
+        let total_servers = self.config.mqtt.servers.len() + self.config.nats.servers.len();
+        if total_servers <= 1 {
+            self.set_status("Cannot delete last server");
+            return;
+        }
+
+        match self.server_manager_kind {
+            BrokerKind::Mqtt => {
+                let Some(server) = self.config.mqtt.servers.get(self.server_manager_index) else {
+                    return;
+                };
+                let name = server.name.clone();
+                let was_active = self.config.mqtt.active_server == name;
+
+                self.config.mqtt.servers.remove(self.server_manager_index);
+                if was_active {
+                    self.config.mqtt.active_server = self
+                        .config
+                        .mqtt
+                        .servers
+                        .first()
+                        .map(|s| s.name.clone())
+                        .unwrap_or_default();
+                }
+                self.server_manager_index = if self.config.mqtt.servers.is_empty() {
+                    0
+                } else {
+                    self.server_manager_index
+                        .min(self.config.mqtt.servers.len().saturating_sub(1))
+                };
+
+                let mut pending_switch = None;
+                if was_active {
+                    if let Some(index) = self.config.mqtt.active_index() {
+                        pending_switch = Some(PendingServerSwitch {
+                            kind: BrokerKind::Mqtt,
+                            index,
+                        });
+                    } else if let Some(index) = self.config.nats.active_index() {
+                        pending_switch = Some(PendingServerSwitch {
+                            kind: BrokerKind::Nats,
+                            index,
+                        });
+                    } else if let Some(first) = self.config.nats.servers.first() {
+                        self.config.nats.active_server = first.name.clone();
+                        pending_switch = Some(PendingServerSwitch {
+                            kind: BrokerKind::Nats,
+                            index: 0,
+                        });
+                    }
+                }
+
+                if let Err(err) = self.save_config() {
+                    self.set_status(&format!("Save failed: {}", err));
+                } else {
+                    if let Some(switch) = pending_switch {
+                        self.pending_server_switch = Some(switch);
+                    }
+                    self.set_status("Server deleted");
+                }
+            }
+            BrokerKind::Nats => {
+                let Some(server) = self.config.nats.servers.get(self.server_manager_index) else {
+                    return;
+                };
+                let name = server.name.clone();
+                let was_active = self.config.nats.active_server == name;
+
+                self.config.nats.servers.remove(self.server_manager_index);
+                if was_active {
+                    self.config.nats.active_server = self
+                        .config
+                        .nats
+                        .servers
+                        .first()
+                        .map(|s| s.name.clone())
+                        .unwrap_or_default();
+                }
+                self.server_manager_index = if self.config.nats.servers.is_empty() {
+                    0
+                } else {
+                    self.server_manager_index
+                        .min(self.config.nats.servers.len().saturating_sub(1))
+                };
+
+                let mut pending_switch = None;
+                if was_active {
+                    if let Some(index) = self.config.nats.active_index() {
+                        pending_switch = Some(PendingServerSwitch {
+                            kind: BrokerKind::Nats,
+                            index,
+                        });
+                    } else if let Some(index) = self.config.mqtt.active_index() {
+                        pending_switch = Some(PendingServerSwitch {
+                            kind: BrokerKind::Mqtt,
+                            index,
+                        });
+                    } else if let Some(first) = self.config.mqtt.servers.first() {
+                        self.config.mqtt.active_server = first.name.clone();
+                        pending_switch = Some(PendingServerSwitch {
+                            kind: BrokerKind::Mqtt,
+                            index: 0,
+                        });
+                    }
+                }
+
+                if let Err(err) = self.save_config() {
+                    self.set_status(&format!("Save failed: {}", err));
+                } else {
+                    if let Some(switch) = pending_switch {
+                        self.pending_server_switch = Some(switch);
+                    }
+                    self.set_status("Server deleted");
+                }
+            }
         }
     }
 
@@ -2015,7 +2345,312 @@ impl App {
         self.save_config()?;
         if prev_active != self.config.mqtt.active_server {
             if let Some(index) = self.config.mqtt.active_index() {
-                self.pending_server_switch = Some(index);
+                self.pending_server_switch = Some(PendingServerSwitch {
+                    kind: BrokerKind::Mqtt,
+                    index,
+                });
+            }
+        }
+        self.set_status("Server saved");
+        Ok(())
+    }
+
+    fn start_nats_server_edit(&mut self, index: Option<usize>) {
+        self.nats_server_edit.active = true;
+        self.nats_server_edit.is_new = index.is_none();
+        self.nats_server_edit.field = NatsServerField::Name;
+        self.nats_server_edit.cursor = 0;
+
+        if let Some(index) = index {
+            let server = &self.config.nats.servers[index];
+            self.nats_server_edit.index = index;
+
+            self.nats_server_edit.name = server.name.clone();
+            self.nats_server_edit.host = server.host.clone();
+            self.nats_server_edit.port = server.port.to_string();
+            self.nats_server_edit.use_tls = server.use_tls;
+            self.nats_server_edit.ca_cert = server.ca_cert.clone().unwrap_or_default();
+            self.nats_server_edit.tls_insecure = server.tls_insecure;
+            self.nats_server_edit.username = server.username.clone().unwrap_or_default();
+            self.nats_server_edit.token = server.token.clone().unwrap_or_default();
+            self.nats_server_edit.creds_file = server.creds_file.clone().unwrap_or_default();
+            self.nats_server_edit.subscribe_subject = server.subscribe_subject.clone();
+
+            self.nats_server_edit.cursor = self
+                .nats_server_edit_field_value(self.nats_server_edit.field)
+                .len();
+        } else {
+            self.nats_server_edit.index = self.config.nats.servers.len();
+
+            self.nats_server_edit.name.clear();
+            self.nats_server_edit.host.clear();
+            self.nats_server_edit.port = "4222".to_string();
+            self.nats_server_edit.use_tls = false;
+            self.nats_server_edit.ca_cert.clear();
+            self.nats_server_edit.tls_insecure = false;
+            self.nats_server_edit.username.clear();
+            self.nats_server_edit.token.clear();
+            self.nats_server_edit.creds_file.clear();
+            self.nats_server_edit.subscribe_subject =
+                BrokerKind::Nats.default_subscribe_pattern().to_string();
+
+            self.nats_server_edit.cursor = self
+                .nats_server_edit_field_value(self.nats_server_edit.field)
+                .len();
+        }
+    }
+
+    fn handle_nats_server_edit_input(&mut self, code: KeyCode) {
+        match code {
+            KeyCode::Esc => {
+                self.nats_server_edit.active = false;
+            }
+            KeyCode::Enter => match self.apply_nats_server_edit() {
+                Ok(()) => {
+                    self.nats_server_edit.active = false;
+                }
+                Err(err) => {
+                    self.set_status(&format!("Invalid: {}", err));
+                }
+            },
+            KeyCode::Tab => {
+                self.nats_server_edit.field = self.next_nats_server_field(self.nats_server_edit.field);
+                self.nats_server_edit.cursor = self
+                    .nats_server_edit_field_value(self.nats_server_edit.field)
+                    .len();
+            }
+            KeyCode::BackTab => {
+                self.nats_server_edit.field = self.prev_nats_server_field(self.nats_server_edit.field);
+                self.nats_server_edit.cursor = self
+                    .nats_server_edit_field_value(self.nats_server_edit.field)
+                    .len();
+            }
+            KeyCode::Left => {
+                if self.nats_server_edit.cursor > 0 {
+                    self.nats_server_edit.cursor -= 1;
+                }
+            }
+            KeyCode::Right => {
+                let max = self
+                    .nats_server_edit_field_value(self.nats_server_edit.field)
+                    .len();
+                if self.nats_server_edit.cursor < max {
+                    self.nats_server_edit.cursor += 1;
+                }
+            }
+            KeyCode::Home => {
+                self.nats_server_edit.cursor = 0;
+            }
+            KeyCode::End => {
+                self.nats_server_edit.cursor = self
+                    .nats_server_edit_field_value(self.nats_server_edit.field)
+                    .len();
+            }
+            KeyCode::Char(' ') if self.nats_server_edit.field == NatsServerField::UseTls => {
+                self.nats_server_edit.use_tls = !self.nats_server_edit.use_tls;
+            }
+            KeyCode::Char(' ') if self.nats_server_edit.field == NatsServerField::TlsInsecure => {
+                self.nats_server_edit.tls_insecure = !self.nats_server_edit.tls_insecure;
+            }
+            KeyCode::Backspace => {
+                if !self.nats_server_edit.field.is_checkbox() {
+                    self.nats_server_edit_backspace();
+                }
+            }
+            KeyCode::Delete => {
+                if !self.nats_server_edit.field.is_checkbox() {
+                    self.nats_server_edit_delete();
+                }
+            }
+            KeyCode::Char(c) => {
+                if !self.nats_server_edit.field.is_checkbox() {
+                    self.nats_server_edit_insert(c);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn nats_server_edit_mut_field(&mut self) -> &mut String {
+        match self.nats_server_edit.field {
+            NatsServerField::Name => &mut self.nats_server_edit.name,
+            NatsServerField::Host => &mut self.nats_server_edit.host,
+            NatsServerField::Port => &mut self.nats_server_edit.port,
+            NatsServerField::UseTls => &mut self.nats_server_edit.host, // dummy
+            NatsServerField::CaCert => &mut self.nats_server_edit.ca_cert,
+            NatsServerField::TlsInsecure => &mut self.nats_server_edit.host, // dummy
+            NatsServerField::Username => &mut self.nats_server_edit.username,
+            NatsServerField::Token => &mut self.nats_server_edit.token,
+            NatsServerField::CredsFile => &mut self.nats_server_edit.creds_file,
+            NatsServerField::SubscribeSubject => &mut self.nats_server_edit.subscribe_subject,
+        }
+    }
+
+    fn nats_server_edit_insert(&mut self, ch: char) {
+        let mut cursor = self.nats_server_edit.cursor;
+        let value = self.nats_server_edit_mut_field();
+        if cursor > value.len() {
+            cursor = value.len();
+        }
+        value.insert(cursor, ch);
+        self.nats_server_edit.cursor = cursor.saturating_add(1);
+    }
+
+    fn nats_server_edit_backspace(&mut self) {
+        let mut cursor = self.nats_server_edit.cursor;
+        let value = self.nats_server_edit_mut_field();
+        if cursor == 0 || value.is_empty() {
+            return;
+        }
+        if cursor > value.len() {
+            cursor = value.len();
+        }
+        let remove_at = cursor.saturating_sub(1);
+        value.remove(remove_at);
+        self.nats_server_edit.cursor = cursor.saturating_sub(1);
+    }
+
+    fn nats_server_edit_delete(&mut self) {
+        let cursor = self.nats_server_edit.cursor;
+        let value = self.nats_server_edit_mut_field();
+        if value.is_empty() || cursor >= value.len() {
+            return;
+        }
+        value.remove(cursor);
+        self.nats_server_edit.cursor = cursor;
+    }
+
+    pub fn nats_server_edit_field_value(&self, field: NatsServerField) -> String {
+        match field {
+            NatsServerField::Name => self.nats_server_edit.name.clone(),
+            NatsServerField::Host => self.nats_server_edit.host.clone(),
+            NatsServerField::Port => self.nats_server_edit.port.clone(),
+            NatsServerField::UseTls => {
+                if self.nats_server_edit.use_tls {
+                    "on".to_string()
+                } else {
+                    "off".to_string()
+                }
+            }
+            NatsServerField::CaCert => self.nats_server_edit.ca_cert.clone(),
+            NatsServerField::TlsInsecure => {
+                if self.nats_server_edit.tls_insecure {
+                    "on (INSECURE!)".to_string()
+                } else {
+                    "off".to_string()
+                }
+            }
+            NatsServerField::Username => self.nats_server_edit.username.clone(),
+            NatsServerField::Token => {
+                if self.nats_server_edit.token.is_empty() {
+                    String::new()
+                } else {
+                    "********".to_string()
+                }
+            }
+            NatsServerField::CredsFile => self.nats_server_edit.creds_file.clone(),
+            NatsServerField::SubscribeSubject => self.nats_server_edit.subscribe_subject.clone(),
+        }
+    }
+
+    fn next_nats_server_field(&self, field: NatsServerField) -> NatsServerField {
+        let idx = NatsServerField::ALL
+            .iter()
+            .position(|f| *f == field)
+            .unwrap_or(0);
+        let next = (idx + 1) % NatsServerField::ALL.len();
+        NatsServerField::ALL[next]
+    }
+
+    fn prev_nats_server_field(&self, field: NatsServerField) -> NatsServerField {
+        let idx = NatsServerField::ALL
+            .iter()
+            .position(|f| *f == field)
+            .unwrap_or(0);
+        let prev = idx.checked_sub(1).unwrap_or(NatsServerField::ALL.len() - 1);
+        NatsServerField::ALL[prev]
+    }
+
+    fn apply_nats_server_edit(&mut self) -> Result<()> {
+        let port: u16 = self
+            .nats_server_edit
+            .port
+            .trim()
+            .parse()
+            .context("Port must be a number")?;
+
+        let server = NatsServerConfig {
+            name: self.nats_server_edit.name.trim().to_string(),
+            host: self.nats_server_edit.host.trim().to_string(),
+            port,
+            use_tls: self.nats_server_edit.use_tls,
+            ca_cert: if self.nats_server_edit.ca_cert.trim().is_empty() {
+                None
+            } else {
+                Some(self.nats_server_edit.ca_cert.trim().to_string())
+            },
+            tls_insecure: self.nats_server_edit.tls_insecure,
+            username: if self.nats_server_edit.username.trim().is_empty() {
+                None
+            } else {
+                Some(self.nats_server_edit.username.trim().to_string())
+            },
+            token: if self.nats_server_edit.token.trim().is_empty() {
+                None
+            } else {
+                Some(self.nats_server_edit.token.trim().to_string())
+            },
+            creds_file: if self.nats_server_edit.creds_file.trim().is_empty() {
+                None
+            } else {
+                Some(self.nats_server_edit.creds_file.trim().to_string())
+            },
+            subscribe_subject: if self.nats_server_edit.subscribe_subject.trim().is_empty() {
+                BrokerKind::Nats.default_subscribe_pattern().to_string()
+            } else {
+                self.nats_server_edit.subscribe_subject.trim().to_string()
+            },
+        };
+
+        if server.name.is_empty() || server.host.is_empty() {
+            return Err(anyhow!("Name and host are required"));
+        }
+        if server.port == 0 {
+            return Err(anyhow!("Port must be greater than 0"));
+        }
+
+        if self
+            .config
+            .nats
+            .servers
+            .iter()
+            .enumerate()
+            .any(|(idx, existing)| idx != self.nats_server_edit.index && existing.name == server.name)
+        {
+            return Err(anyhow!("Server name must be unique"));
+        }
+
+        let prev_active = self.config.nats.active_server.clone();
+        if self.nats_server_edit.is_new {
+            self.config.nats.servers.push(server);
+            self.server_manager_index = self.config.nats.servers.len().saturating_sub(1);
+        } else if let Some(existing) = self.config.nats.servers.get_mut(self.nats_server_edit.index) {
+            *existing = server;
+        }
+
+        if self.config.nats.active_server.is_empty() {
+            if let Some(server) = self.config.nats.servers.first() {
+                self.config.nats.active_server = server.name.clone();
+            }
+        }
+
+        self.save_config()?;
+        if prev_active != self.config.nats.active_server {
+            if let Some(index) = self.config.nats.active_index() {
+                self.pending_server_switch = Some(PendingServerSwitch {
+                    kind: BrokerKind::Nats,
+                    index,
+                });
             }
         }
         self.set_status("Server saved");
@@ -2506,11 +3141,12 @@ fn prev_bookmark_field(field: BookmarkField) -> BookmarkField {
 }
 
 /// Create a wildcard pattern from a specific topic
-/// Replaces segments that look like IDs with + wildcards
+/// Replaces segments that look like IDs with a single-level wildcard.
 /// e.g., "telemetry/zap-0000d8c467e385a0/meter/zap/json" -> "telemetry/+/meter/+/json"
-fn create_wildcard_pattern(topic: &str) -> String {
+fn create_wildcard_pattern(topic: &str, separator: char, wildcard_single: char) -> String {
+    let sep = separator.to_string();
     topic
-        .split('/')
+        .split(separator)
         .map(|segment| {
             // Replace segments that look like device IDs or UUIDs
             if segment.len() > 8
@@ -2523,22 +3159,22 @@ fn create_wildcard_pattern(topic: &str) -> String {
                     // Numeric IDs
                 )
             {
-                "+".to_string()
+                wildcard_single.to_string()
             } else {
                 segment.to_string()
             }
         })
         .collect::<Vec<_>>()
-        .join("/")
+        .join(&sep)
 }
 
 /// Get a short version of a topic for display
-fn short_topic(topic: &str) -> String {
-    let parts: Vec<&str> = topic.split('/').collect();
+fn short_topic(topic: &str, separator: char) -> String {
+    let parts: Vec<&str> = topic.split(separator).collect();
     if parts.len() <= 2 {
         topic.to_string()
     } else {
         // Show first and last parts
-        format!("{}/..", parts[0])
+        format!("{}{}..", parts[0], separator)
     }
 }

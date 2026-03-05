@@ -185,10 +185,10 @@ fn render_header(frame: &mut Frame, app: &App, area: Rect) {
         Span::styled(" total", Style::default().fg(Color::DarkGray)),
     ];
 
-    if let Some(server) = app.active_server() {
+    if let Some(server) = app.active_server_info() {
         header_parts.push(Span::styled(" │ ", Style::default().fg(Color::DarkGray)));
         header_parts.push(Span::styled(
-            server.name.clone(),
+            format!("{}:{}", server.kind.label(), server.name),
             Style::default().fg(Color::Yellow),
         ));
     }

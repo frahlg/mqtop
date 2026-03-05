@@ -8,6 +8,7 @@ use ratatui::{
 
 use super::bordered_block;
 use crate::app::{App, Panel};
+use crate::broker::BrokerKind;
 use crate::state::{render_sparkline, HealthStatus, LatencyTracker, Stats};
 
 pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
@@ -28,7 +29,7 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(app.connection_color()),
         ),
     ]));
-    if let Some(server) = app.active_server() {
+    if let Some(server) = app.active_server_info() {
         lines.push(Line::from(vec![
             Span::styled("  Host    ", Style::default().fg(Color::DarkGray)),
             Span::styled(
@@ -38,7 +39,10 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
         ]));
         lines.push(Line::from(vec![
             Span::styled("  Server  ", Style::default().fg(Color::DarkGray)),
-            Span::styled(server.name.clone(), Style::default().fg(Color::Yellow)),
+            Span::styled(
+                format!("{}:{}", server.kind.label(), server.name),
+                Style::default().fg(Color::Yellow),
+            ),
         ]));
     }
     lines.push(Line::from(""));
@@ -168,14 +172,26 @@ pub fn render_stats(frame: &mut Frame, app: &App, area: Rect) {
         Span::styled("  Uptime  ", Style::default().fg(Color::DarkGray)),
         Span::styled(app.stats.uptime_string(), Style::default().fg(Color::White)),
     ]));
-    if let Some(server) = app.active_server() {
-        lines.push(Line::from(vec![
-            Span::styled("  Client  ", Style::default().fg(Color::DarkGray)),
-            Span::styled(
-                server.client_id.clone(),
-                Style::default().fg(Color::DarkGray),
-            ),
-        ]));
+    match app.connected_broker_kind {
+        BrokerKind::Mqtt => {
+            if let Some(server) = app.active_mqtt_server() {
+                lines.push(Line::from(vec![
+                    Span::styled("  Client  ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(server.client_id.clone(), Style::default().fg(Color::DarkGray)),
+                ]));
+            }
+        }
+        BrokerKind::Nats => {
+            if let Some(server) = app.active_nats_server() {
+                lines.push(Line::from(vec![
+                    Span::styled("  Sub     ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        server.subscribe_subject.clone(),
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                ]));
+            }
+        }
     }
 
     // Latency info

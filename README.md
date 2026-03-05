@@ -2,7 +2,7 @@
 
 *"In the beginning there was the Message, and the Message was with the Broker, and the Message was... well, probably JSON."*
 
-A high-performance MQTT explorer TUI built in Rust. Like htop for your MQTT broker, except it won't judge you for subscribing to `#` in production.*
+A high-performance MQTT/NATS explorer TUI built in Rust. Like htop for your broker, except it won't judge you for subscribing to `#` or `>` in production.*
 
 **It handles 1000+ messages per second without breaking a sweat, much like Death handles souls - efficiently and without unnecessary drama.*
 
@@ -35,15 +35,15 @@ A high-performance MQTT explorer TUI built in Rust. Like htop for your MQTT brok
 
 The universe, as has been observed, operates on certain immutable rules. So does mqtop:
 
-- **Real-time MQTT streaming** - Messages arrive faster than you can read them, much like footnotes in a Discworld novel
+- **Real-time MQTT + NATS streaming** - Messages arrive faster than you can read them, much like footnotes in a Discworld novel
 - **Hierarchical topic tree** - Collapsible, expandable, and infinitely more organized than L-space
 - **Device health monitoring** - Knows when your devices are healthy, warning, or have shuffled off this mortal coil
 - **Metric tracking with sparklines** - Little graphs that go up and down, creating the illusion of understanding
-- **MQTT wildcard filters** - `+` and `#` patterns, because sometimes you need to catch everything
+- **Protocol-aware wildcard filters** - MQTT (`+`, `#`) and NATS (`*`, `>`) patterns
 - **Latency monitoring** - Track message delays with the precision of a well-oiled mechanism
 - **Starred topics** - Bookmark the important ones, forget the rest
 - **Publish bookmarks** - Save your favorite messages for rapid-fire testing
-- **MQTT publishing** - Send messages directly, no external tools required
+- **Publishing** - Send MQTT topics or NATS subjects directly, no external tools required
 - **Clipboard support** - Copy topics and payloads to share the joy
 - **JSON syntax highlighting** - Pretty colors for pretty data
 - **Vim-style navigation** - `hjkl` for those who have Seen The Light
@@ -112,7 +112,8 @@ Binary materializes at `target/release/mqtop` (~3MB).
 
 2. **The Server Manager opens automatically.** Press `a` to add a new server.
 
-3. **Fill in your broker details:**
+3. **Choose protocol and fill in your broker details:**
+   - In Server Manager press `Tab` to switch between MQTT and NATS.
    - Name: `my-broker`
    - Host: `mqtt.example.com`
    - Port: `8883` (or `1883` for non-TLS)
@@ -146,14 +147,18 @@ That's it. No config files required (though you can use them if you're that kind
 | Key | What It Does |
 |-----|--------------|
 | `/` | Fuzzy search |
-| `f` | Set topic filter (MQTT wildcards) |
+| `f` | Set topic/subject filter (MQTT/NATS wildcards) |
 | `F` | Clear filter |
 | `*` | Show only starred topics |
 
-**Filter examples:**
+**MQTT filter examples:**
 - `sensors/#` - All sensor topics
 - `sensors/+/temperature` - Temperature from any device
 - `ook/#` - The Librarian's private topics*
+
+**NATS filter examples:**
+- `telemetry.>` - All telemetry subjects
+- `telemetry.*.meter` - Meter updates from any device
 
 <sub>* Not recommended unless you want to be hit with a very large dictionary.</sub>
 
@@ -166,6 +171,7 @@ That's it. No config files required (though you can use them if you're that kind
 | `e` | Edit server configuration |
 | `a` | Add new server |
 | `d` | Delete server |
+| `Tab` | Switch MQTT/NATS server list |
 | `Esc` | Close |
 
 ### Publishing
@@ -209,6 +215,16 @@ client_id = "mqtop-prod"
 subscribe_topic = "#"
 keep_alive_secs = 30
 
+[nats]
+active_server = "ops"
+
+[[nats.servers]]
+name = "ops"
+host = "nats.example.com"
+port = 4222
+use_tls = false
+subscribe_subject = ">"
+
 [ui]
 message_buffer_size = 100    # Messages per topic
 stats_window_secs = 10       # Rate calculation window
@@ -225,6 +241,8 @@ color = "red"
 ```
 
 Servers added via the UI are automatically saved to the config file.
+
+Note: `creds_file` for NATS is parsed in config but currently not supported by the built-in NATS client. Use `username`/`token` for now.
 
 ---
 

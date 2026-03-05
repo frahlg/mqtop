@@ -2,12 +2,13 @@
 
 use std::collections::HashMap;
 
-/// A trie-based data structure for storing MQTT topic hierarchies efficiently.
+/// A trie-based data structure for storing hierarchical topics efficiently.
 /// Provides O(k) lookup where k is the number of topic levels.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct TopicTree {
     root: TopicNode,
     total_topics: usize,
+    separator: char,
 }
 
 #[derive(Debug, Default)]
@@ -42,9 +43,20 @@ impl TopicTree {
         Self::default()
     }
 
+    pub fn with_separator(separator: char) -> Self {
+        Self {
+            separator,
+            ..Self::default()
+        }
+    }
+
+    pub fn separator(&self) -> char {
+        self.separator
+    }
+
     /// Insert or update a topic in the tree
     pub fn insert(&mut self, topic: &str, payload_size: usize) {
-        let segments: Vec<&str> = topic.split('/').collect();
+        let segments: Vec<&str> = topic.split(self.separator).collect();
         let mut current = &mut self.root;
 
         for segment in &segments {
@@ -105,7 +117,7 @@ impl TopicTree {
             let full_path = if path.is_empty() {
                 segment.clone()
             } else {
-                format!("{}/{}", path, segment)
+                format!("{}{}{}", path, self.separator, segment)
             };
 
             let is_expanded = expanded.contains(&full_path);
@@ -152,7 +164,7 @@ impl TopicTree {
             let full_path = if path.is_empty() {
                 segment.clone()
             } else {
-                format!("{}/{}", path, segment)
+                format!("{}{}{}", path, self.separator, segment)
             };
 
             // Simple substring match (case-insensitive)
@@ -200,7 +212,7 @@ impl TopicTree {
             return Some(current);
         }
 
-        for segment in topic.split('/') {
+        for segment in topic.split(self.separator) {
             current = current.children.get(segment)?;
         }
 
@@ -212,7 +224,7 @@ impl TopicTree {
             let full_path = if path.is_empty() {
                 segment.clone()
             } else {
-                format!("{}/{}", path, segment)
+                format!("{}{}{}", path, self.separator, segment)
             };
 
             if !child.children.is_empty() {
@@ -250,6 +262,16 @@ impl TopicTree {
     pub fn clear(&mut self) {
         self.root = TopicNode::default();
         self.total_topics = 0;
+    }
+}
+
+impl Default for TopicTree {
+    fn default() -> Self {
+        Self {
+            root: TopicNode::default(),
+            total_topics: 0,
+            separator: '/',
+        }
     }
 }
 

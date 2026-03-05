@@ -228,7 +228,7 @@ impl Default for DeviceTracker {
 /// Extract device ID from topic path
 /// Pattern: telemetry/{device_id}/... or devices/{device_id}/...
 fn extract_device_id(topic: &str) -> Option<String> {
-    let parts: Vec<&str> = topic.split('/').collect();
+    let parts: Vec<&str> = topic.split(['/', '.']).collect();
 
     // telemetry/{device_id}/...
     if parts.len() >= 2 && parts[0] == "telemetry" {
@@ -251,7 +251,7 @@ fn extract_device_id(topic: &str) -> Option<String> {
 /// Extract device type from topic path
 /// Pattern: telemetry/{device_id}/{type}/...
 fn extract_device_type(topic: &str) -> Option<String> {
-    let parts: Vec<&str> = topic.split('/').collect();
+    let parts: Vec<&str> = topic.split(['/', '.']).collect();
 
     // telemetry/{device_id}/{type}/...
     if parts.len() >= 3 && parts[0] == "telemetry" {

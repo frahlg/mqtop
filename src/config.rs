@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 pub struct Config {
     pub mqtt: MqttConfig,
     #[serde(default)]
+    pub nats: NatsConfig,
+    #[serde(default)]
     pub ui: UiConfig,
 }
 
@@ -96,6 +98,13 @@ pub struct MqttConfig {
     pub servers: Vec<MqttServerConfig>,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct NatsConfig {
+    pub active_server: String,
+    #[serde(default)]
+    pub servers: Vec<NatsServerConfig>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MqttServerConfig {
     pub name: String,
@@ -180,8 +189,16 @@ fn default_port() -> u16 {
     1883
 }
 
+fn default_nats_port() -> u16 {
+    4222
+}
+
 fn default_subscribe_topic() -> String {
     "#".to_string()
+}
+
+fn default_nats_subscribe_subject() -> String {
+    ">".to_string()
 }
 
 fn default_keep_alive() -> u64 {
@@ -344,12 +361,18 @@ impl Config {
     }
 
     pub fn validate(&self) -> Result<()> {
+        self.validate_mqtt()?;
+        self.validate_nats()?;
+        Ok(())
+    }
+
+    fn validate_mqtt(&self) -> Result<()> {
         // Allow empty server list (user will configure via UI)
         if self.mqtt.servers.is_empty() {
             return Ok(());
         }
 
-        // If there are servers, active_server must be valid
+        // If there are servers, active_server must be valid (unless empty)
         if !self.mqtt.active_server.trim().is_empty() && self.mqtt.active_server().is_none() {
             bail!("Active MQTT server not found in server list");
         }
@@ -372,6 +395,35 @@ impl Config {
                     "MQTT client_id cannot be empty when ID Suffix is 'none' (server: {})",
                     server.name
                 );
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_nats(&self) -> Result<()> {
+        // Allow empty server list (user will configure via UI)
+        if self.nats.servers.is_empty() {
+            return Ok(());
+        }
+
+        // If there are servers, active_server must be valid (unless empty)
+        if !self.nats.active_server.trim().is_empty() && self.nats.active_server().is_none() {
+            bail!("Active NATS server not found in server list");
+        }
+
+        let mut names = std::collections::HashSet::new();
+        for server in &self.nats.servers {
+            if server.name.trim().is_empty() {
+                bail!("NATS server name cannot be empty");
+            }
+            if server.host.trim().is_empty() {
+                bail!("NATS server host cannot be empty");
+            }
+            if !names.insert(server.name.clone()) {
+                bail!("Duplicate NATS server name: {}", server.name);
+            }
+            if server.subscribe_subject.trim().is_empty() {
+                bail!("NATS subscribe_subject cannot be empty (server: {})", server.name);
             }
         }
         Ok(())
@@ -428,6 +480,41 @@ impl MqttConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NatsServerConfig {
+    pub name: String,
+    pub host: String,
+    #[serde(default = "default_nats_port")]
+    pub port: u16,
+    #[serde(default)]
+    pub use_tls: bool,
+    /// Path to custom CA certificate (PEM format)
+    pub ca_cert: Option<String>,
+    /// Skip TLS certificate verification (insecure, for testing only)
+    #[serde(default)]
+    pub tls_insecure: bool,
+    /// Username for NATS auth (optional)
+    pub username: Option<String>,
+    /// Token for NATS auth (optional; also used as password for user/pass setups)
+    pub token: Option<String>,
+    /// Optional NATS creds file (JWT/NKey)
+    pub creds_file: Option<String>,
+    #[serde(default = "default_nats_subscribe_subject")]
+    pub subscribe_subject: String,
+}
+
+impl NatsConfig {
+    pub fn active_index(&self) -> Option<usize> {
+        self.servers
+            .iter()
+            .position(|server| server.name == self.active_server)
+    }
+
+    pub fn active_server(&self) -> Option<&NatsServerConfig> {
+        self.active_index().and_then(|idx| self.servers.get(idx))
+    }
+}
+
 impl MqttServerConfig {
     /// Get the username, defaulting to client_id if not set
     pub fn get_username(&self) -> &str {
@@ -435,6 +522,16 @@ impl MqttServerConfig {
     }
 
     /// Get the token, returning empty string if none set
+    pub fn get_token(&self) -> &str {
+        self.token.as_deref().unwrap_or("")
+    }
+}
+
+impl NatsServerConfig {
+    pub fn get_username(&self) -> &str {
+        self.username.as_deref().unwrap_or("")
+    }
+
     pub fn get_token(&self) -> &str {
         self.token.as_deref().unwrap_or("")
     }
