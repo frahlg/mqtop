@@ -132,6 +132,10 @@ pub struct MqttServerConfig {
     pub username: Option<String>,
     /// Token for authentication (goes in password field)
     pub token: Option<String>,
+    #[serde(default)]
+    pub auth_mode: MqttAuthMode,
+    pub identity_id: Option<String>,
+    pub private_key_path: Option<String>,
     #[serde(default = "default_subscribe_topic")]
     pub subscribe_topic: String,
     /// QoS level for subscriptions (0, 1, or 2)
@@ -480,6 +484,22 @@ impl MqttConfig {
     }
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NatsAuthMode {
+    #[default]
+    Basic,
+    JwtAuthCallout,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MqttAuthMode {
+    #[default]
+    Basic,
+    JwtAuthCallout,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NatsServerConfig {
     pub name: String,
@@ -499,6 +519,10 @@ pub struct NatsServerConfig {
     pub token: Option<String>,
     /// Optional NATS creds file (JWT/NKey)
     pub creds_file: Option<String>,
+    #[serde(default)]
+    pub auth_mode: NatsAuthMode,
+    pub identity_id: Option<String>,
+    pub private_key_path: Option<String>,
     #[serde(default = "default_nats_subscribe_subject")]
     pub subscribe_subject: String,
 }
@@ -525,6 +549,42 @@ impl MqttServerConfig {
     pub fn get_token(&self) -> &str {
         self.token.as_deref().unwrap_or("")
     }
+
+    pub fn nova_core_testnet() -> Self {
+        Self {
+            name: "Nova Core Testnet MQTT".to_string(),
+            host: "novacore-testnet.sourceful.dev".to_string(),
+            port: 8883,
+            use_tls: true,
+            ca_cert: None,
+            client_cert: None,
+            client_key: None,
+            tls_insecure: false,
+            client_id: String::new(),
+            use_exact_client_id: false,
+            username: None,
+            token: None,
+            auth_mode: MqttAuthMode::JwtAuthCallout,
+            identity_id: None,
+            private_key_path: None,
+            subscribe_topic: "#".to_string(),
+            subscribe_qos: 1,
+            keep_alive_secs: 30,
+            mqtt_version: 3,
+            clean_session: true,
+            lwt_topic: None,
+            lwt_payload: None,
+            lwt_qos: 0,
+            lwt_retain: false,
+        }
+    }
+
+    pub fn nova_core_mainnet() -> Self {
+        let mut p = Self::nova_core_testnet();
+        p.name = "Nova Core Mainnet MQTT".to_string();
+        p.host = "novacore-mainnet.sourceful.dev".to_string();
+        p
+    }
 }
 
 impl NatsServerConfig {
@@ -534,5 +594,30 @@ impl NatsServerConfig {
 
     pub fn get_token(&self) -> &str {
         self.token.as_deref().unwrap_or("")
+    }
+
+    pub fn nova_core_testnet() -> Self {
+        Self {
+            name: "Nova Core Testnet".to_string(),
+            host: "novacore-testnet.sourceful.dev".to_string(),
+            port: 4443,
+            use_tls: true,
+            ca_cert: None,
+            tls_insecure: false,
+            username: None,
+            token: None,
+            creds_file: None,
+            auth_mode: NatsAuthMode::JwtAuthCallout,
+            identity_id: None,
+            private_key_path: None,
+            subscribe_subject: ">".to_string(),
+        }
+    }
+
+    pub fn nova_core_mainnet() -> Self {
+        let mut p = Self::nova_core_testnet();
+        p.name = "Nova Core Mainnet".to_string();
+        p.host = "novacore-mainnet.sourceful.dev".to_string();
+        p
     }
 }

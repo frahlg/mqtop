@@ -57,6 +57,13 @@ pub fn render_help(frame: &mut Frame) {
         keybind("?", "Toggle this help"),
         keybind("q / Ctrl+C", "Quit"),
         Line::from(""),
+        section("Nova Core"),
+        keybind("Presets", "Press 'a' in server manager, select Nova Core preset"),
+        keybind("Auth", "Uses ES256 JWT signed by your private key"),
+        keybind("Key File", "Store at ~/.config/mqtop/keys/ with chmod 600"),
+        keybind("Testnet", "novacore-testnet.sourceful.dev (NATS:4443, MQTT:8883)"),
+        keybind("Mainnet", "novacore-mainnet.sourceful.dev (NATS:4443, MQTT:8883)"),
+        Line::from(""),
         Line::from(vec![
             Span::styled(
                 "Tip: ",
