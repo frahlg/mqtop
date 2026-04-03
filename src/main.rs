@@ -1,6 +1,7 @@
 mod app;
 mod broker;
 mod config;
+mod jwt;
 mod mqtt;
 mod nats;
 mod persistence;
