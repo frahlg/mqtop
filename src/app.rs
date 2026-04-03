@@ -7,7 +7,9 @@ use anyhow::{anyhow, Context, Result};
 use crossterm::event::{KeyCode, KeyModifiers};
 
 use crate::broker::BrokerKind;
-use crate::config::{Config, MqttServerConfig, NatsServerConfig, CONFIG_BACKUP_LIMIT};
+use crate::config::{
+    Config, MqttAuthMode, MqttServerConfig, NatsAuthMode, NatsServerConfig, CONFIG_BACKUP_LIMIT,
+};
 use crate::mqtt::{ConnectionState, MqttEvent, MqttMessage};
 use crate::persistence::{Bookmark, UserData};
 use crate::state::metric_tracker::topic_matches;
@@ -147,6 +149,15 @@ pub struct App {
     pub pending_publish: Option<PendingPublish>,
     /// Bookmark manager state
     pub bookmark_manager: BookmarkManagerState,
+    /// Preset selector state
+    pub preset_select: PresetSelectState,
+}
+
+#[derive(Debug, Clone)]
+pub struct PresetSelectState {
+    pub active: bool,
+    pub selected: usize,
+    pub broker_kind: BrokerKind,
 }
 
 #[derive(Debug, Clone)]
@@ -170,8 +181,11 @@ pub struct ServerEditState {
     pub client_id: String,
     pub use_exact_client_id: bool,
     // Authentication
+    pub auth_mode: MqttAuthMode,
     pub username: String,
     pub token: String,
+    pub identity_id: String,
+    pub private_key_path: String,
     // Subscription
     pub subscribe_topic: String,
     pub subscribe_qos: String,
@@ -201,9 +215,11 @@ pub struct NatsServerEditState {
     pub ca_cert: String,
     pub tls_insecure: bool,
     // Auth
+    pub auth_mode: NatsAuthMode,
     pub username: String,
     pub token: String,
-    pub creds_file: String,
+    pub identity_id: String,
+    pub private_key_path: String,
     // Subscription
     pub subscribe_subject: String,
 }
@@ -216,9 +232,11 @@ pub enum NatsServerField {
     UseTls,
     CaCert,
     TlsInsecure,
+    AuthMode,
     Username,
     Token,
-    CredsFile,
+    IdentityId,
+    PrivateKeyPath,
     SubscribeSubject,
 }
 
@@ -238,8 +256,11 @@ pub enum ServerField {
     ClientId,
     UseExactClientId,
     // Auth
+    AuthMode,
     Username,
     Token,
+    IdentityId,
+    PrivateKeyPath,
     // Subscription
     SubscribeTopic,
     SubscribeQos,
@@ -261,6 +282,16 @@ pub enum PayloadMode {
     Json, // Force JSON pretty-print
 }
 
+impl Default for PresetSelectState {
+    fn default() -> Self {
+        Self {
+            active: false,
+            selected: 0,
+            broker_kind: BrokerKind::Mqtt,
+        }
+    }
+}
+
 impl Default for ServerEditState {
     fn default() -> Self {
         Self {
@@ -279,8 +310,11 @@ impl Default for ServerEditState {
             tls_insecure: false,
             client_id: String::new(),
             use_exact_client_id: false,
+            auth_mode: MqttAuthMode::Basic,
             username: String::new(),
             token: String::new(),
+            identity_id: String::new(),
+            private_key_path: String::new(),
             subscribe_topic: String::new(),
             subscribe_qos: String::new(),
             keep_alive_secs: String::new(),
@@ -307,9 +341,11 @@ impl Default for NatsServerEditState {
             use_tls: false,
             ca_cert: String::new(),
             tls_insecure: false,
+            auth_mode: NatsAuthMode::Basic,
             username: String::new(),
             token: String::new(),
-            creds_file: String::new(),
+            identity_id: String::new(),
+            private_key_path: String::new(),
             subscribe_subject: String::new(),
         }
     }
@@ -450,7 +486,7 @@ impl BookmarkField {
 }
 
 impl ServerField {
-    pub const ALL: [ServerField; 20] = [
+    pub const ALL: [ServerField; 23] = [
         // Basic
         ServerField::Name,
         ServerField::Host,
@@ -465,8 +501,11 @@ impl ServerField {
         ServerField::ClientId,
         ServerField::UseExactClientId,
         // Auth
+        ServerField::AuthMode,
         ServerField::Username,
         ServerField::Token,
+        ServerField::IdentityId,
+        ServerField::PrivateKeyPath,
         // Subscription
         ServerField::SubscribeTopic,
         ServerField::SubscribeQos,
@@ -492,8 +531,11 @@ impl ServerField {
             ServerField::TlsInsecure => "TLS Insecure",
             ServerField::ClientId => "Client ID",
             ServerField::UseExactClientId => "ID Suffix",
+            ServerField::AuthMode => "Auth Mode",
             ServerField::Username => "Username",
             ServerField::Token => "Token",
+            ServerField::IdentityId => "Identity ID",
+            ServerField::PrivateKeyPath => "Key Path",
             ServerField::SubscribeTopic => "Subscribe",
             ServerField::SubscribeQos => "Sub QoS",
             ServerField::KeepAlive => "Keep Alive",
@@ -513,21 +555,24 @@ impl ServerField {
                 | ServerField::UseExactClientId
                 | ServerField::CleanSession
                 | ServerField::LwtRetain
+                | ServerField::AuthMode
         )
     }
 }
 
 impl NatsServerField {
-    pub const ALL: [NatsServerField; 10] = [
+    pub const ALL: [NatsServerField; 12] = [
         NatsServerField::Name,
         NatsServerField::Host,
         NatsServerField::Port,
         NatsServerField::UseTls,
         NatsServerField::CaCert,
         NatsServerField::TlsInsecure,
+        NatsServerField::AuthMode,
         NatsServerField::Username,
         NatsServerField::Token,
-        NatsServerField::CredsFile,
+        NatsServerField::IdentityId,
+        NatsServerField::PrivateKeyPath,
         NatsServerField::SubscribeSubject,
     ];
 
@@ -539,15 +584,20 @@ impl NatsServerField {
             NatsServerField::UseTls => "TLS",
             NatsServerField::CaCert => "CA Cert",
             NatsServerField::TlsInsecure => "TLS Insecure",
+            NatsServerField::AuthMode => "Auth Mode",
             NatsServerField::Username => "Username",
             NatsServerField::Token => "Token",
-            NatsServerField::CredsFile => "Creds",
+            NatsServerField::IdentityId => "Identity ID",
+            NatsServerField::PrivateKeyPath => "Key Path",
             NatsServerField::SubscribeSubject => "Subscribe",
         }
     }
 
     pub fn is_checkbox(&self) -> bool {
-        matches!(self, NatsServerField::UseTls | NatsServerField::TlsInsecure)
+        matches!(
+            self,
+            NatsServerField::UseTls | NatsServerField::TlsInsecure | NatsServerField::AuthMode
+        )
     }
 }
 
@@ -602,6 +652,7 @@ impl App {
             publish_edit: PublishEditState::default(),
             pending_publish: None,
             bookmark_manager: BookmarkManagerState::default(),
+            preset_select: PresetSelectState::default(),
         }
     }
 
@@ -1693,7 +1744,99 @@ impl App {
         Ok(())
     }
 
+    pub fn preset_labels(&self) -> Vec<&'static str> {
+        match self.preset_select.broker_kind {
+            BrokerKind::Mqtt => vec![
+                "Blank",
+                "Nova Core Testnet (MQTT)",
+                "Nova Core Mainnet (MQTT)",
+            ],
+            BrokerKind::Nats => vec![
+                "Blank",
+                "Nova Core Testnet (NATS)",
+                "Nova Core Mainnet (NATS)",
+            ],
+        }
+    }
+
+    fn handle_preset_select_input(&mut self, code: KeyCode) {
+        let count = self.preset_labels().len();
+        match code {
+            KeyCode::Esc => {
+                self.preset_select.active = false;
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.preset_select.selected + 1 < count {
+                    self.preset_select.selected += 1;
+                }
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if self.preset_select.selected > 0 {
+                    self.preset_select.selected -= 1;
+                }
+            }
+            KeyCode::Enter => {
+                self.preset_select.active = false;
+                match self.preset_select.broker_kind {
+                    BrokerKind::Mqtt => {
+                        self.start_server_edit(None);
+                        match self.preset_select.selected {
+                            1 => self.apply_mqtt_preset(MqttServerConfig::nova_core_testnet()),
+                            2 => self.apply_mqtt_preset(MqttServerConfig::nova_core_mainnet()),
+                            _ => {} // Blank
+                        }
+                    }
+                    BrokerKind::Nats => {
+                        self.start_nats_server_edit(None);
+                        match self.preset_select.selected {
+                            1 => self.apply_nats_preset(NatsServerConfig::nova_core_testnet()),
+                            2 => self.apply_nats_preset(NatsServerConfig::nova_core_mainnet()),
+                            _ => {} // Blank
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn apply_mqtt_preset(&mut self, preset: MqttServerConfig) {
+        self.server_edit.name = preset.name;
+        self.server_edit.host = preset.host;
+        self.server_edit.port = preset.port.to_string();
+        self.server_edit.use_tls = preset.use_tls;
+        self.server_edit.ca_cert = preset.ca_cert.unwrap_or_default();
+        self.server_edit.tls_insecure = preset.tls_insecure;
+        self.server_edit.auth_mode = preset.auth_mode;
+        self.server_edit.identity_id = preset.identity_id.unwrap_or_default();
+        self.server_edit.private_key_path = preset.private_key_path.unwrap_or_default();
+        self.server_edit.subscribe_topic = preset.subscribe_topic;
+        self.server_edit.subscribe_qos = preset.subscribe_qos.to_string();
+        self.server_edit.keep_alive_secs = preset.keep_alive_secs.to_string();
+        self.server_edit.cursor = self.server_edit_field_value(self.server_edit.field).len();
+    }
+
+    fn apply_nats_preset(&mut self, preset: NatsServerConfig) {
+        self.nats_server_edit.name = preset.name;
+        self.nats_server_edit.host = preset.host;
+        self.nats_server_edit.port = preset.port.to_string();
+        self.nats_server_edit.use_tls = preset.use_tls;
+        self.nats_server_edit.ca_cert = preset.ca_cert.unwrap_or_default();
+        self.nats_server_edit.tls_insecure = preset.tls_insecure;
+        self.nats_server_edit.auth_mode = preset.auth_mode;
+        self.nats_server_edit.identity_id = preset.identity_id.unwrap_or_default();
+        self.nats_server_edit.private_key_path = preset.private_key_path.unwrap_or_default();
+        self.nats_server_edit.subscribe_subject = preset.subscribe_subject;
+        self.nats_server_edit.cursor = self
+            .nats_server_edit_field_value(self.nats_server_edit.field)
+            .len();
+    }
+
     pub fn handle_server_manager_input(&mut self, code: KeyCode, _modifiers: KeyModifiers) {
+        if self.preset_select.active {
+            self.handle_preset_select_input(code);
+            return;
+        }
         if self.server_edit.active {
             self.handle_server_edit_input(code);
             return;
@@ -1725,10 +1868,11 @@ impl App {
                 }
             }
             KeyCode::Char('a') => {
-                match self.server_manager_kind {
-                    BrokerKind::Mqtt => self.start_server_edit(None),
-                    BrokerKind::Nats => self.start_nats_server_edit(None),
-                }
+                self.preset_select = PresetSelectState {
+                    active: true,
+                    selected: 0,
+                    broker_kind: self.server_manager_kind,
+                };
             }
             KeyCode::Char('e') => {
                 match self.server_manager_kind {
@@ -1962,8 +2106,11 @@ impl App {
             self.server_edit.client_id = server.client_id.clone();
             self.server_edit.use_exact_client_id = server.use_exact_client_id;
             // Auth
+            self.server_edit.auth_mode = server.auth_mode.clone();
             self.server_edit.username = server.username.clone().unwrap_or_default();
             self.server_edit.token = server.token.clone().unwrap_or_default();
+            self.server_edit.identity_id = server.identity_id.clone().unwrap_or_default();
+            self.server_edit.private_key_path = server.private_key_path.clone().unwrap_or_default();
             // Subscription
             self.server_edit.subscribe_topic = server.subscribe_topic.clone();
             self.server_edit.subscribe_qos = server.subscribe_qos.to_string();
@@ -1992,8 +2139,11 @@ impl App {
             self.server_edit.client_id.clear();
             self.server_edit.use_exact_client_id = false;
             // Auth
+            self.server_edit.auth_mode = MqttAuthMode::Basic;
             self.server_edit.username.clear();
             self.server_edit.token.clear();
+            self.server_edit.identity_id.clear();
+            self.server_edit.private_key_path.clear();
             // Subscription
             self.server_edit.subscribe_topic = "#".to_string();
             self.server_edit.subscribe_qos = "1".to_string();
@@ -2059,6 +2209,12 @@ impl App {
             KeyCode::Char(' ') if self.server_edit.field == ServerField::UseExactClientId => {
                 self.server_edit.use_exact_client_id = !self.server_edit.use_exact_client_id;
             }
+            KeyCode::Char(' ') if self.server_edit.field == ServerField::AuthMode => {
+                self.server_edit.auth_mode = match self.server_edit.auth_mode {
+                    MqttAuthMode::Basic => MqttAuthMode::JwtAuthCallout,
+                    MqttAuthMode::JwtAuthCallout => MqttAuthMode::Basic,
+                };
+            }
             KeyCode::Char(' ') if self.server_edit.field == ServerField::CleanSession => {
                 self.server_edit.clean_session = !self.server_edit.clean_session;
             }
@@ -2096,8 +2252,11 @@ impl App {
             ServerField::TlsInsecure => &mut self.server_edit.host, // dummy, not used for checkbox
             ServerField::ClientId => &mut self.server_edit.client_id,
             ServerField::UseExactClientId => &mut self.server_edit.host, // dummy, not used for checkbox
+            ServerField::AuthMode => &mut self.server_edit.host, // dummy for checkbox
             ServerField::Username => &mut self.server_edit.username,
             ServerField::Token => &mut self.server_edit.token,
+            ServerField::IdentityId => &mut self.server_edit.identity_id,
+            ServerField::PrivateKeyPath => &mut self.server_edit.private_key_path,
             ServerField::SubscribeTopic => &mut self.server_edit.subscribe_topic,
             ServerField::SubscribeQos => &mut self.server_edit.subscribe_qos,
             ServerField::KeepAlive => &mut self.server_edit.keep_alive_secs,
@@ -2176,6 +2335,10 @@ impl App {
                     "auto (+timestamp)".to_string()
                 }
             }
+            ServerField::AuthMode => match self.server_edit.auth_mode {
+                MqttAuthMode::Basic => "Basic (user/pass)".to_string(),
+                MqttAuthMode::JwtAuthCallout => "JWT Auth Callout (Nova Core)".to_string(),
+            },
             ServerField::Username => self.server_edit.username.clone(),
             ServerField::Token => {
                 if self.server_edit.token.is_empty() {
@@ -2184,6 +2347,8 @@ impl App {
                     "********".to_string()
                 }
             }
+            ServerField::IdentityId => self.server_edit.identity_id.clone(),
+            ServerField::PrivateKeyPath => self.server_edit.private_key_path.clone(),
             ServerField::SubscribeTopic => self.server_edit.subscribe_topic.clone(),
             ServerField::SubscribeQos => self.server_edit.subscribe_qos.clone(),
             ServerField::KeepAlive => self.server_edit.keep_alive_secs.clone(),
@@ -2207,22 +2372,32 @@ impl App {
         }
     }
 
-    fn next_server_field(&self, field: ServerField) -> ServerField {
-        let idx = ServerField::ALL
+    pub fn visible_server_fields(&self) -> Vec<ServerField> {
+        ServerField::ALL
             .iter()
-            .position(|f| *f == field)
-            .unwrap_or(0);
-        let next = (idx + 1) % ServerField::ALL.len();
-        ServerField::ALL[next]
+            .copied()
+            .filter(|f| match f {
+                ServerField::Username | ServerField::Token => {
+                    self.server_edit.auth_mode == MqttAuthMode::Basic
+                }
+                ServerField::IdentityId | ServerField::PrivateKeyPath => {
+                    self.server_edit.auth_mode == MqttAuthMode::JwtAuthCallout
+                }
+                _ => true,
+            })
+            .collect()
+    }
+
+    fn next_server_field(&self, field: ServerField) -> ServerField {
+        let visible = self.visible_server_fields();
+        let idx = visible.iter().position(|f| *f == field).unwrap_or(0);
+        visible[(idx + 1) % visible.len()]
     }
 
     fn prev_server_field(&self, field: ServerField) -> ServerField {
-        let idx = ServerField::ALL
-            .iter()
-            .position(|f| *f == field)
-            .unwrap_or(0);
-        let prev = idx.checked_sub(1).unwrap_or(ServerField::ALL.len() - 1);
-        ServerField::ALL[prev]
+        let visible = self.visible_server_fields();
+        let idx = visible.iter().position(|f| *f == field).unwrap_or(0);
+        visible[idx.checked_sub(1).unwrap_or(visible.len() - 1)]
     }
 
     fn apply_server_edit(&mut self) -> Result<()> {
@@ -2279,6 +2454,17 @@ impl App {
                 None
             } else {
                 Some(self.server_edit.token.trim().to_string())
+            },
+            auth_mode: self.server_edit.auth_mode.clone(),
+            identity_id: if self.server_edit.identity_id.trim().is_empty() {
+                None
+            } else {
+                Some(self.server_edit.identity_id.trim().to_string())
+            },
+            private_key_path: if self.server_edit.private_key_path.trim().is_empty() {
+                None
+            } else {
+                Some(self.server_edit.private_key_path.trim().to_string())
             },
             subscribe_topic: if self.server_edit.subscribe_topic.trim().is_empty() {
                 "#".to_string()
@@ -2373,7 +2559,10 @@ impl App {
             self.nats_server_edit.tls_insecure = server.tls_insecure;
             self.nats_server_edit.username = server.username.clone().unwrap_or_default();
             self.nats_server_edit.token = server.token.clone().unwrap_or_default();
-            self.nats_server_edit.creds_file = server.creds_file.clone().unwrap_or_default();
+            self.nats_server_edit.auth_mode = server.auth_mode.clone();
+            self.nats_server_edit.identity_id = server.identity_id.clone().unwrap_or_default();
+            self.nats_server_edit.private_key_path =
+                server.private_key_path.clone().unwrap_or_default();
             self.nats_server_edit.subscribe_subject = server.subscribe_subject.clone();
 
             self.nats_server_edit.cursor = self
@@ -2388,9 +2577,11 @@ impl App {
             self.nats_server_edit.use_tls = false;
             self.nats_server_edit.ca_cert.clear();
             self.nats_server_edit.tls_insecure = false;
+            self.nats_server_edit.auth_mode = NatsAuthMode::Basic;
             self.nats_server_edit.username.clear();
             self.nats_server_edit.token.clear();
-            self.nats_server_edit.creds_file.clear();
+            self.nats_server_edit.identity_id.clear();
+            self.nats_server_edit.private_key_path.clear();
             self.nats_server_edit.subscribe_subject =
                 BrokerKind::Nats.default_subscribe_pattern().to_string();
 
@@ -2452,6 +2643,12 @@ impl App {
             KeyCode::Char(' ') if self.nats_server_edit.field == NatsServerField::TlsInsecure => {
                 self.nats_server_edit.tls_insecure = !self.nats_server_edit.tls_insecure;
             }
+            KeyCode::Char(' ') if self.nats_server_edit.field == NatsServerField::AuthMode => {
+                self.nats_server_edit.auth_mode = match self.nats_server_edit.auth_mode {
+                    NatsAuthMode::Basic => NatsAuthMode::JwtAuthCallout,
+                    NatsAuthMode::JwtAuthCallout => NatsAuthMode::Basic,
+                };
+            }
             KeyCode::Backspace => {
                 if !self.nats_server_edit.field.is_checkbox() {
                     self.nats_server_edit_backspace();
@@ -2479,9 +2676,11 @@ impl App {
             NatsServerField::UseTls => &mut self.nats_server_edit.host, // dummy
             NatsServerField::CaCert => &mut self.nats_server_edit.ca_cert,
             NatsServerField::TlsInsecure => &mut self.nats_server_edit.host, // dummy
+            NatsServerField::AuthMode => &mut self.nats_server_edit.host, // dummy for checkbox
             NatsServerField::Username => &mut self.nats_server_edit.username,
             NatsServerField::Token => &mut self.nats_server_edit.token,
-            NatsServerField::CredsFile => &mut self.nats_server_edit.creds_file,
+            NatsServerField::IdentityId => &mut self.nats_server_edit.identity_id,
+            NatsServerField::PrivateKeyPath => &mut self.nats_server_edit.private_key_path,
             NatsServerField::SubscribeSubject => &mut self.nats_server_edit.subscribe_subject,
         }
     }
@@ -2541,6 +2740,10 @@ impl App {
                 }
             }
             NatsServerField::Username => self.nats_server_edit.username.clone(),
+            NatsServerField::AuthMode => match self.nats_server_edit.auth_mode {
+                NatsAuthMode::Basic => "Basic (user/pass)".to_string(),
+                NatsAuthMode::JwtAuthCallout => "JWT Auth Callout (Nova Core)".to_string(),
+            },
             NatsServerField::Token => {
                 if self.nats_server_edit.token.is_empty() {
                     String::new()
@@ -2548,27 +2751,38 @@ impl App {
                     "********".to_string()
                 }
             }
-            NatsServerField::CredsFile => self.nats_server_edit.creds_file.clone(),
+            NatsServerField::IdentityId => self.nats_server_edit.identity_id.clone(),
+            NatsServerField::PrivateKeyPath => self.nats_server_edit.private_key_path.clone(),
             NatsServerField::SubscribeSubject => self.nats_server_edit.subscribe_subject.clone(),
         }
     }
 
-    fn next_nats_server_field(&self, field: NatsServerField) -> NatsServerField {
-        let idx = NatsServerField::ALL
+    pub fn visible_nats_fields(&self) -> Vec<NatsServerField> {
+        NatsServerField::ALL
             .iter()
-            .position(|f| *f == field)
-            .unwrap_or(0);
-        let next = (idx + 1) % NatsServerField::ALL.len();
-        NatsServerField::ALL[next]
+            .copied()
+            .filter(|f| match f {
+                NatsServerField::Username | NatsServerField::Token => {
+                    self.nats_server_edit.auth_mode == NatsAuthMode::Basic
+                }
+                NatsServerField::IdentityId | NatsServerField::PrivateKeyPath => {
+                    self.nats_server_edit.auth_mode == NatsAuthMode::JwtAuthCallout
+                }
+                _ => true,
+            })
+            .collect()
+    }
+
+    fn next_nats_server_field(&self, field: NatsServerField) -> NatsServerField {
+        let visible = self.visible_nats_fields();
+        let idx = visible.iter().position(|f| *f == field).unwrap_or(0);
+        visible[(idx + 1) % visible.len()]
     }
 
     fn prev_nats_server_field(&self, field: NatsServerField) -> NatsServerField {
-        let idx = NatsServerField::ALL
-            .iter()
-            .position(|f| *f == field)
-            .unwrap_or(0);
-        let prev = idx.checked_sub(1).unwrap_or(NatsServerField::ALL.len() - 1);
-        NatsServerField::ALL[prev]
+        let visible = self.visible_nats_fields();
+        let idx = visible.iter().position(|f| *f == field).unwrap_or(0);
+        visible[idx.checked_sub(1).unwrap_or(visible.len() - 1)]
     }
 
     fn apply_nats_server_edit(&mut self) -> Result<()> {
@@ -2600,10 +2814,17 @@ impl App {
             } else {
                 Some(self.nats_server_edit.token.trim().to_string())
             },
-            creds_file: if self.nats_server_edit.creds_file.trim().is_empty() {
+            creds_file: None,
+            auth_mode: self.nats_server_edit.auth_mode.clone(),
+            identity_id: if self.nats_server_edit.identity_id.trim().is_empty() {
                 None
             } else {
-                Some(self.nats_server_edit.creds_file.trim().to_string())
+                Some(self.nats_server_edit.identity_id.trim().to_string())
+            },
+            private_key_path: if self.nats_server_edit.private_key_path.trim().is_empty() {
+                None
+            } else {
+                Some(self.nats_server_edit.private_key_path.trim().to_string())
             },
             subscribe_subject: if self.nats_server_edit.subscribe_subject.trim().is_empty() {
                 BrokerKind::Nats.default_subscribe_pattern().to_string()

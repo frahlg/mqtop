@@ -48,6 +48,11 @@ arboard = "3"
 rustls-pemfile = "2"
 rustls-native-certs = "0.7"
 
+# JWT / Nova Core auth
+p256 = { version = "0.13", features = ["pem", "ecdsa"] }
+uuid = { version = "1", features = ["v4"] }
+base64 = "0.22"
+
 [dev-dependencies]
 # Testing
 tokio-test = "0.4"

@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use super::widgets::{centered_rect, dialog_key_hint};
-use crate::app::{App, NatsServerField, ServerField};
+use crate::app::{App, ServerField};
 use crate::broker::BrokerKind;
 
 pub fn render_server_manager(frame: &mut Frame, app: &App) {
@@ -24,6 +24,10 @@ pub fn render_server_manager(frame: &mut Frame, app: &App) {
     frame.render_widget(block.clone(), area);
     let inner = block.inner(area);
 
+    if app.preset_select.active {
+        render_preset_select(frame, app, inner);
+        return;
+    }
     if app.server_edit.active {
         render_server_edit(frame, app, inner);
         return;
@@ -182,7 +186,7 @@ fn render_server_edit(frame: &mut Frame, app: &App, area: Rect) {
     ]));
     frame.render_widget(header, chunks[0]);
 
-    let fields = ServerField::ALL;
+    let fields = app.visible_server_fields();
     let items: Vec<ListItem> = fields
         .iter()
         .map(|field| {
@@ -269,7 +273,7 @@ fn render_nats_server_edit(frame: &mut Frame, app: &App, area: Rect) {
     ]));
     frame.render_widget(header, chunks[0]);
 
-    let fields = NatsServerField::ALL;
+    let fields = app.visible_nats_fields();
     let items: Vec<ListItem> = fields
         .iter()
         .map(|field| {
@@ -320,6 +324,57 @@ fn render_nats_server_edit(frame: &mut Frame, app: &App, area: Rect) {
     hints.extend(dialog_key_hint("Enter", "Save"));
     hints.extend(dialog_key_hint("Tab", "Next"));
     hints.extend(dialog_key_hint("Space", "Toggle"));
+    hints.extend(dialog_key_hint("Esc", "Cancel"));
+    frame.render_widget(Paragraph::new(Line::from(hints)), chunks[2]);
+}
+
+fn render_preset_select(frame: &mut Frame, app: &App, area: Rect) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(2),
+            Constraint::Min(3),
+            Constraint::Length(2),
+        ])
+        .split(area);
+
+    let kind_label = match app.preset_select.broker_kind {
+        BrokerKind::Mqtt => "MQTT",
+        BrokerKind::Nats => "NATS",
+    };
+    let header = Paragraph::new(Line::from(vec![Span::styled(
+        format!("Select {} server template", kind_label),
+        Style::default().fg(Color::Cyan),
+    )]));
+    frame.render_widget(header, chunks[0]);
+
+    let labels = app.preset_labels();
+    let items: Vec<ListItem> = labels
+        .iter()
+        .enumerate()
+        .map(|(i, label)| {
+            let is_selected = i == app.preset_select.selected;
+            let prefix = if is_selected { "▶ " } else { "  " };
+            let style = if is_selected {
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::White)
+            };
+            ListItem::new(Line::from(Span::styled(
+                format!("{}{}", prefix, label),
+                style,
+            )))
+        })
+        .collect();
+
+    let list = List::new(items);
+    frame.render_widget(list, chunks[1]);
+
+    let mut hints = Vec::new();
+    hints.extend(dialog_key_hint("Enter", "Select"));
+    hints.extend(dialog_key_hint("↑↓", "Navigate"));
     hints.extend(dialog_key_hint("Esc", "Cancel"));
     frame.render_widget(Paragraph::new(Line::from(hints)), chunks[2]);
 }
