@@ -7,7 +7,9 @@ use anyhow::{anyhow, Context, Result};
 use crossterm::event::{KeyCode, KeyModifiers};
 
 use crate::broker::BrokerKind;
-use crate::config::{Config, MqttServerConfig, NatsServerConfig, CONFIG_BACKUP_LIMIT};
+use crate::config::{
+    Config, MqttServerConfig, NatsAuthMode, NatsServerConfig, CONFIG_BACKUP_LIMIT,
+};
 use crate::mqtt::{ConnectionState, MqttEvent, MqttMessage};
 use crate::persistence::{Bookmark, UserData};
 use crate::state::metric_tracker::topic_matches;
@@ -204,6 +206,10 @@ pub struct NatsServerEditState {
     pub username: String,
     pub token: String,
     pub creds_file: String,
+    // JWT auth-callout
+    pub auth_mode_jwt: bool,
+    pub identity_id: String,
+    pub private_key_path: String,
     // Subscription
     pub subscribe_subject: String,
 }
@@ -219,6 +225,9 @@ pub enum NatsServerField {
     Username,
     Token,
     CredsFile,
+    AuthModeJwt,
+    IdentityId,
+    PrivateKeyPath,
     SubscribeSubject,
 }
 
@@ -310,6 +319,9 @@ impl Default for NatsServerEditState {
             username: String::new(),
             token: String::new(),
             creds_file: String::new(),
+            auth_mode_jwt: false,
+            identity_id: String::new(),
+            private_key_path: String::new(),
             subscribe_subject: String::new(),
         }
     }
@@ -518,7 +530,7 @@ impl ServerField {
 }
 
 impl NatsServerField {
-    pub const ALL: [NatsServerField; 10] = [
+    pub const ALL: [NatsServerField; 13] = [
         NatsServerField::Name,
         NatsServerField::Host,
         NatsServerField::Port,
@@ -528,6 +540,9 @@ impl NatsServerField {
         NatsServerField::Username,
         NatsServerField::Token,
         NatsServerField::CredsFile,
+        NatsServerField::AuthModeJwt,
+        NatsServerField::IdentityId,
+        NatsServerField::PrivateKeyPath,
         NatsServerField::SubscribeSubject,
     ];
 
@@ -542,12 +557,18 @@ impl NatsServerField {
             NatsServerField::Username => "Username",
             NatsServerField::Token => "Token",
             NatsServerField::CredsFile => "Creds",
+            NatsServerField::AuthModeJwt => "JWT Auth",
+            NatsServerField::IdentityId => "Identity ID",
+            NatsServerField::PrivateKeyPath => "Key Path",
             NatsServerField::SubscribeSubject => "Subscribe",
         }
     }
 
     pub fn is_checkbox(&self) -> bool {
-        matches!(self, NatsServerField::UseTls | NatsServerField::TlsInsecure)
+        matches!(
+            self,
+            NatsServerField::UseTls | NatsServerField::TlsInsecure | NatsServerField::AuthModeJwt
+        )
     }
 }
 
@@ -2374,6 +2395,12 @@ impl App {
             self.nats_server_edit.username = server.username.clone().unwrap_or_default();
             self.nats_server_edit.token = server.token.clone().unwrap_or_default();
             self.nats_server_edit.creds_file = server.creds_file.clone().unwrap_or_default();
+            self.nats_server_edit.auth_mode_jwt =
+                server.auth_mode == NatsAuthMode::JwtAuthCallout;
+            self.nats_server_edit.identity_id =
+                server.identity_id.clone().unwrap_or_default();
+            self.nats_server_edit.private_key_path =
+                server.private_key_path.clone().unwrap_or_default();
             self.nats_server_edit.subscribe_subject = server.subscribe_subject.clone();
 
             self.nats_server_edit.cursor = self
@@ -2391,6 +2418,9 @@ impl App {
             self.nats_server_edit.username.clear();
             self.nats_server_edit.token.clear();
             self.nats_server_edit.creds_file.clear();
+            self.nats_server_edit.auth_mode_jwt = false;
+            self.nats_server_edit.identity_id.clear();
+            self.nats_server_edit.private_key_path.clear();
             self.nats_server_edit.subscribe_subject =
                 BrokerKind::Nats.default_subscribe_pattern().to_string();
 
@@ -2452,6 +2482,9 @@ impl App {
             KeyCode::Char(' ') if self.nats_server_edit.field == NatsServerField::TlsInsecure => {
                 self.nats_server_edit.tls_insecure = !self.nats_server_edit.tls_insecure;
             }
+            KeyCode::Char(' ') if self.nats_server_edit.field == NatsServerField::AuthModeJwt => {
+                self.nats_server_edit.auth_mode_jwt = !self.nats_server_edit.auth_mode_jwt;
+            }
             KeyCode::Backspace => {
                 if !self.nats_server_edit.field.is_checkbox() {
                     self.nats_server_edit_backspace();
@@ -2482,6 +2515,9 @@ impl App {
             NatsServerField::Username => &mut self.nats_server_edit.username,
             NatsServerField::Token => &mut self.nats_server_edit.token,
             NatsServerField::CredsFile => &mut self.nats_server_edit.creds_file,
+            NatsServerField::AuthModeJwt => &mut self.nats_server_edit.host, // dummy (checkbox)
+            NatsServerField::IdentityId => &mut self.nats_server_edit.identity_id,
+            NatsServerField::PrivateKeyPath => &mut self.nats_server_edit.private_key_path,
             NatsServerField::SubscribeSubject => &mut self.nats_server_edit.subscribe_subject,
         }
     }
@@ -2549,6 +2585,15 @@ impl App {
                 }
             }
             NatsServerField::CredsFile => self.nats_server_edit.creds_file.clone(),
+            NatsServerField::AuthModeJwt => {
+                if self.nats_server_edit.auth_mode_jwt {
+                    "on".to_string()
+                } else {
+                    "off".to_string()
+                }
+            }
+            NatsServerField::IdentityId => self.nats_server_edit.identity_id.clone(),
+            NatsServerField::PrivateKeyPath => self.nats_server_edit.private_key_path.clone(),
             NatsServerField::SubscribeSubject => self.nats_server_edit.subscribe_subject.clone(),
         }
     }
@@ -2604,6 +2649,21 @@ impl App {
                 None
             } else {
                 Some(self.nats_server_edit.creds_file.trim().to_string())
+            },
+            auth_mode: if self.nats_server_edit.auth_mode_jwt {
+                NatsAuthMode::JwtAuthCallout
+            } else {
+                NatsAuthMode::Basic
+            },
+            identity_id: if self.nats_server_edit.identity_id.trim().is_empty() {
+                None
+            } else {
+                Some(self.nats_server_edit.identity_id.trim().to_string())
+            },
+            private_key_path: if self.nats_server_edit.private_key_path.trim().is_empty() {
+                None
+            } else {
+                Some(self.nats_server_edit.private_key_path.trim().to_string())
             },
             subscribe_subject: if self.nats_server_edit.subscribe_subject.trim().is_empty() {
                 BrokerKind::Nats.default_subscribe_pattern().to_string()

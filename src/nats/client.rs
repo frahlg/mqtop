@@ -44,19 +44,8 @@ impl NatsClient {
     ) -> Result<Self> {
         let _ = event_tx.send(MqttEvent::StateChange(ConnectionState::Connecting));
 
-        // Built-in client supports token and user/pass auth. creds_file is intentionally
-        // not supported without bringing in extra crypto deps.
-        if let Some(creds_file) = config
-            .creds_file
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-        {
-            bail!(
-                "NATS creds_file is not supported by the built-in client (creds_file={})",
-                creds_file
-            );
-        }
+        // Resolve authentication — for JwtAuthCallout, generate a fresh JWT
+        let config = resolve_auth(&config)?;
 
         // First connection attempt — synchronous so caller gets immediate error if unreachable.
         let stream = connect_stream(&config).await?;
@@ -239,8 +228,18 @@ async fn try_reconnect(
     event_tx: &mpsc::UnboundedSender<MqttEvent>,
     cmd_tx_shared: &Arc<RwLock<mpsc::UnboundedSender<Command>>>,
 ) -> Result<(JoinHandle<()>, JoinHandle<()>)> {
-    let stream = connect_stream(config).await?;
-    let (reader, writer) = perform_handshake(stream, config).await?;
+    // Resolve auth on each reconnect so JwtAuthCallout gets a fresh JWT.
+    let config = match resolve_auth(config) {
+        Ok(c) => c,
+        Err(e) => {
+            error!("JWT auth resolution failed: {}", e);
+            // Continue with original config — will likely fail auth but triggers reconnect
+            config.clone()
+        }
+    };
+
+    let stream = connect_stream(&config).await?;
+    let (reader, writer) = perform_handshake(stream, &config).await?;
 
     info!(
         "NATS reconnected, subscribed to {}",
@@ -474,6 +473,38 @@ fn spawn_write_loop(
     })
 }
 
+/// For JwtAuthCallout mode, generate a fresh JWT and populate username/token.
+/// For Basic mode, return the config unchanged.
+fn resolve_auth(config: &NatsServerConfig) -> Result<NatsServerConfig> {
+    use crate::config::NatsAuthMode;
+
+    match config.auth_mode {
+        NatsAuthMode::Basic => Ok(config.clone()),
+        NatsAuthMode::JwtAuthCallout => {
+            let identity_id = config
+                .identity_id
+                .as_deref()
+                .filter(|s| !s.trim().is_empty())
+                .ok_or_else(|| anyhow!("JwtAuthCallout requires identity_id"))?;
+            let key_path = config
+                .private_key_path
+                .as_deref()
+                .filter(|s| !s.trim().is_empty())
+                .ok_or_else(|| anyhow!("JwtAuthCallout requires private_key_path"))?;
+
+            let pem_bytes = crate::keystore::load_private_key(key_path)?;
+            let jwt = crate::jwt::generate_nova_jwt(identity_id, &pem_bytes)?;
+
+            let mut resolved = config.clone();
+            resolved.username = Some(identity_id.to_string());
+            resolved.token = Some(jwt);
+
+            info!("Generated ES256 JWT for identity {}", identity_id);
+            Ok(resolved)
+        }
+    }
+}
+
 fn build_connect_payload(config: &NatsServerConfig) -> String {
     let mut obj = serde_json::json!({
         "verbose": false,
@@ -653,6 +684,7 @@ fn parse_hmsg_header(line: &str) -> Result<(String, usize, usize)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::NatsAuthMode;
 
     // --- parse_msg_header ---
 
@@ -729,6 +761,9 @@ mod tests {
             username: None,
             token: None,
             creds_file: None,
+            auth_mode: NatsAuthMode::default(),
+            identity_id: None,
+            private_key_path: None,
             subscribe_subject: ">".to_string(),
         }
     }
@@ -803,5 +838,13 @@ mod tests {
             }
         }
         assert!(found_msg, "Expected a Message event");
+    }
+
+    #[test]
+    fn resolve_auth_basic_unchanged() {
+        let cfg = test_config("test");
+        let resolved = resolve_auth(&cfg).unwrap();
+        assert!(resolved.username.is_none());
+        assert!(resolved.token.is_none());
     }
 }
