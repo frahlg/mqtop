@@ -2280,6 +2280,9 @@ impl App {
             } else {
                 Some(self.server_edit.token.trim().to_string())
             },
+            auth_mode: crate::config::MqttAuthMode::default(),
+            identity_id: None,
+            private_key_path: None,
             subscribe_topic: if self.server_edit.subscribe_topic.trim().is_empty() {
                 "#".to_string()
             } else {
