@@ -729,6 +729,9 @@ mod tests {
             username: None,
             token: None,
             creds_file: None,
+            auth_mode: crate::config::NatsAuthMode::default(),
+            identity_id: None,
+            private_key_path: None,
             subscribe_subject: ">".to_string(),
         }
     }

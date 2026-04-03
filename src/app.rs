@@ -7,7 +7,7 @@ use anyhow::{anyhow, Context, Result};
 use crossterm::event::{KeyCode, KeyModifiers};
 
 use crate::broker::BrokerKind;
-use crate::config::{Config, MqttServerConfig, NatsServerConfig, CONFIG_BACKUP_LIMIT};
+use crate::config::{Config, MqttAuthMode, MqttServerConfig, NatsAuthMode, NatsServerConfig, CONFIG_BACKUP_LIMIT};
 use crate::mqtt::{ConnectionState, MqttEvent, MqttMessage};
 use crate::persistence::{Bookmark, UserData};
 use crate::state::metric_tracker::topic_matches;
@@ -2280,6 +2280,9 @@ impl App {
             } else {
                 Some(self.server_edit.token.trim().to_string())
             },
+            auth_mode: MqttAuthMode::default(),
+            identity_id: None,
+            private_key_path: None,
             subscribe_topic: if self.server_edit.subscribe_topic.trim().is_empty() {
                 "#".to_string()
             } else {
@@ -2605,6 +2608,9 @@ impl App {
             } else {
                 Some(self.nats_server_edit.creds_file.trim().to_string())
             },
+            auth_mode: NatsAuthMode::default(),
+            identity_id: None,
+            private_key_path: None,
             subscribe_subject: if self.nats_server_edit.subscribe_subject.trim().is_empty() {
                 BrokerKind::Nats.default_subscribe_pattern().to_string()
             } else {

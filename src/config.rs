@@ -132,6 +132,13 @@ pub struct MqttServerConfig {
     pub username: Option<String>,
     /// Token for authentication (goes in password field)
     pub token: Option<String>,
+    /// Authentication mode
+    #[serde(default)]
+    pub auth_mode: MqttAuthMode,
+    /// Identity ID for JWT auth-callout
+    pub identity_id: Option<String>,
+    /// Path to ES256 private key PEM file
+    pub private_key_path: Option<String>,
     #[serde(default = "default_subscribe_topic")]
     pub subscribe_topic: String,
     /// QoS level for subscriptions (0, 1, or 2)
@@ -396,6 +403,14 @@ impl Config {
                     server.name
                 );
             }
+            if server.auth_mode == MqttAuthMode::JwtAuthCallout {
+                if server.identity_id.as_ref().is_none_or(|s| s.trim().is_empty()) {
+                    bail!("MQTT server '{}': JwtAuthCallout requires identity_id", server.name);
+                }
+                if server.private_key_path.as_ref().is_none_or(|s| s.trim().is_empty()) {
+                    bail!("MQTT server '{}': JwtAuthCallout requires private_key_path", server.name);
+                }
+            }
         }
         Ok(())
     }
@@ -424,6 +439,14 @@ impl Config {
             }
             if server.subscribe_subject.trim().is_empty() {
                 bail!("NATS subscribe_subject cannot be empty (server: {})", server.name);
+            }
+            if server.auth_mode == NatsAuthMode::JwtAuthCallout {
+                if server.identity_id.as_ref().is_none_or(|s| s.trim().is_empty()) {
+                    bail!("NATS server '{}': JwtAuthCallout requires identity_id", server.name);
+                }
+                if server.private_key_path.as_ref().is_none_or(|s| s.trim().is_empty()) {
+                    bail!("NATS server '{}': JwtAuthCallout requires private_key_path", server.name);
+                }
             }
         }
         Ok(())
@@ -480,6 +503,28 @@ impl MqttConfig {
     }
 }
 
+/// Authentication mode for NATS connections.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NatsAuthMode {
+    /// Token or user/pass authentication (existing behavior)
+    #[default]
+    Basic,
+    /// ES256 JWT auth-callout (Nova Core)
+    JwtAuthCallout,
+}
+
+/// Authentication mode for MQTT connections.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MqttAuthMode {
+    /// Password/token authentication (existing behavior)
+    #[default]
+    Basic,
+    /// ES256 JWT auth-callout (Nova Core)
+    JwtAuthCallout,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NatsServerConfig {
     pub name: String,
@@ -499,6 +544,13 @@ pub struct NatsServerConfig {
     pub token: Option<String>,
     /// Optional NATS creds file (JWT/NKey)
     pub creds_file: Option<String>,
+    /// Authentication mode
+    #[serde(default)]
+    pub auth_mode: NatsAuthMode,
+    /// Identity ID for JWT auth-callout (used as NATS username and JWT device field)
+    pub identity_id: Option<String>,
+    /// Path to ES256 private key PEM file
+    pub private_key_path: Option<String>,
     #[serde(default = "default_nats_subscribe_subject")]
     pub subscribe_subject: String,
 }
@@ -525,6 +577,46 @@ impl MqttServerConfig {
     pub fn get_token(&self) -> &str {
         self.token.as_deref().unwrap_or("")
     }
+
+    /// Create a preset for Nova Core Testnet (MQTT)
+    #[allow(dead_code)]
+    pub fn nova_core_testnet() -> Self {
+        Self {
+            name: "Nova Core Testnet MQTT".to_string(),
+            host: "novacore-testnet.sourceful.dev".to_string(),
+            port: 8883,
+            use_tls: true,
+            ca_cert: None,
+            client_cert: None,
+            client_key: None,
+            tls_insecure: false,
+            client_id: String::new(),
+            use_exact_client_id: false,
+            username: None,
+            token: None,
+            auth_mode: MqttAuthMode::JwtAuthCallout,
+            identity_id: None,
+            private_key_path: None,
+            subscribe_topic: "#".to_string(),
+            subscribe_qos: 1,
+            keep_alive_secs: 30,
+            mqtt_version: 3,
+            clean_session: true,
+            lwt_topic: None,
+            lwt_payload: None,
+            lwt_qos: 0,
+            lwt_retain: false,
+        }
+    }
+
+    /// Create a preset for Nova Core Mainnet (MQTT)
+    #[allow(dead_code)]
+    pub fn nova_core_mainnet() -> Self {
+        let mut preset = Self::nova_core_testnet();
+        preset.name = "Nova Core Mainnet MQTT".to_string();
+        preset.host = "novacore-mainnet.sourceful.dev".to_string();
+        preset
+    }
 }
 
 impl NatsServerConfig {
@@ -534,5 +626,81 @@ impl NatsServerConfig {
 
     pub fn get_token(&self) -> &str {
         self.token.as_deref().unwrap_or("")
+    }
+
+    /// Create a preset for Nova Core Testnet (NATS)
+    #[allow(dead_code)]
+    pub fn nova_core_testnet() -> Self {
+        Self {
+            name: "Nova Core Testnet".to_string(),
+            host: "novacore-testnet.sourceful.dev".to_string(),
+            port: 4443,
+            use_tls: true,
+            ca_cert: None,
+            tls_insecure: false,
+            username: None,
+            token: None,
+            creds_file: None,
+            auth_mode: NatsAuthMode::JwtAuthCallout,
+            identity_id: None,
+            private_key_path: None,
+            subscribe_subject: ">".to_string(),
+        }
+    }
+
+    /// Create a preset for Nova Core Mainnet (NATS)
+    #[allow(dead_code)]
+    pub fn nova_core_mainnet() -> Self {
+        let mut preset = Self::nova_core_testnet();
+        preset.name = "Nova Core Mainnet".to_string();
+        preset.host = "novacore-mainnet.sourceful.dev".to_string();
+        preset
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_backwards_compatible_nats_config() {
+        // Config without new fields should still parse
+        let toml_str = r#"
+            name = "test"
+            host = "localhost"
+            port = 4222
+            subscribe_subject = ">"
+        "#;
+        let config: NatsServerConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.auth_mode, NatsAuthMode::Basic);
+        assert!(config.identity_id.is_none());
+        assert!(config.private_key_path.is_none());
+    }
+
+    #[test]
+    fn test_jwt_auth_callout_config() {
+        let toml_str = r#"
+            name = "nova"
+            host = "novacore-testnet.sourceful.dev"
+            port = 4443
+            use_tls = true
+            auth_mode = "jwt_auth_callout"
+            identity_id = "int-my-service"
+            private_key_path = "~/.config/mqtop/keys/testnet.pem"
+            subscribe_subject = ">"
+        "#;
+        let config: NatsServerConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.auth_mode, NatsAuthMode::JwtAuthCallout);
+        assert_eq!(config.identity_id.as_deref(), Some("int-my-service"));
+    }
+
+    #[test]
+    fn test_nova_core_preset_roundtrip() {
+        let preset = NatsServerConfig::nova_core_testnet();
+        let toml_str = toml::to_string_pretty(&preset).unwrap();
+        let parsed: NatsServerConfig = toml::from_str(&toml_str).unwrap();
+        assert_eq!(parsed.host, "novacore-testnet.sourceful.dev");
+        assert_eq!(parsed.port, 4443);
+        assert_eq!(parsed.auth_mode, NatsAuthMode::JwtAuthCallout);
     }
 }
