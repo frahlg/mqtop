@@ -44,6 +44,11 @@ dirs = "5"
 # Clipboard
 arboard = "3"
 
+# JWT / crypto
+p256 = { version = "0.13", features = ["pem", "ecdsa"] }
+uuid = { version = "1", features = ["v4"] }
+base64 = "0.22"
+
 # TLS support (match rumqttc's versions)
 rustls-pemfile = "2"
 rustls-native-certs = "0.7"

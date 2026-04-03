@@ -480,6 +480,14 @@ impl MqttConfig {
     }
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NatsAuthMode {
+    #[default]
+    Basic,
+    JwtAuthCallout,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NatsServerConfig {
     pub name: String,
@@ -499,6 +507,13 @@ pub struct NatsServerConfig {
     pub token: Option<String>,
     /// Optional NATS creds file (JWT/NKey)
     pub creds_file: Option<String>,
+    /// Authentication mode: basic (user/pass/token) or jwt_auth_callout (ES256 JWT)
+    #[serde(default)]
+    pub auth_mode: NatsAuthMode,
+    /// Identity ID for JWT auth-callout mode
+    pub identity_id: Option<String>,
+    /// Path to EC P-256 private key PEM for JWT auth-callout mode
+    pub private_key_path: Option<String>,
     #[serde(default = "default_nats_subscribe_subject")]
     pub subscribe_subject: String,
 }
