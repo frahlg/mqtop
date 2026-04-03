@@ -1,6 +1,8 @@
 mod app;
 mod broker;
 mod config;
+mod jwt;
+mod keystore;
 mod mqtt;
 mod nats;
 mod persistence;
@@ -143,6 +145,9 @@ fn run_config_wizard(config_path: &PathBuf) -> Result<Config> {
         } else {
             Some(token.trim().to_string())
         },
+        auth_mode: config::MqttAuthMode::default(),
+        identity_id: None,
+        private_key_path: None,
         subscribe_topic: if subscribe_topic.trim().is_empty() {
             "#".to_string()
         } else {

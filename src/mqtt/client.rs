@@ -11,7 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, error, info, warn};
 
-use crate::config::MqttServerConfig;
+use crate::config::{MqttAuthMode, MqttServerConfig};
 use crate::mqtt::message::MqttMessage;
 use crate::mqtt::resilience::{BackoffStrategy, ConnectionHealth};
 
@@ -62,8 +62,33 @@ impl MqttClient {
         info!("Connecting with client_id: {}", unique_client_id);
         let mut mqttoptions = MqttOptions::new(&unique_client_id, &config.host, config.port);
 
-        // Set authentication: username (defaults to client_id), password = token
-        mqttoptions.set_credentials(config.get_username(), config.get_token());
+        // Resolve credentials based on auth mode
+        let (effective_username, effective_token) = match config.auth_mode {
+            MqttAuthMode::JwtAuthCallout => {
+                let identity_id = config
+                    .identity_id
+                    .as_deref()
+                    .filter(|s| !s.trim().is_empty())
+                    .ok_or_else(|| anyhow::anyhow!("JwtAuthCallout requires identity_id"))?;
+                let key_path = config
+                    .private_key_path
+                    .as_deref()
+                    .filter(|s| !s.trim().is_empty())
+                    .ok_or_else(|| anyhow::anyhow!("JwtAuthCallout requires private_key_path"))?;
+
+                let pem_bytes = crate::keystore::load_private_key(key_path)?;
+                let jwt = crate::jwt::generate_nova_jwt(identity_id, &pem_bytes)?;
+
+                info!("Generated ES256 JWT for MQTT identity {}", identity_id);
+                (identity_id.to_string(), jwt)
+            }
+            MqttAuthMode::Basic => (
+                config.get_username().to_string(),
+                config.get_token().to_string(),
+            ),
+        };
+
+        mqttoptions.set_credentials(effective_username, effective_token);
         mqttoptions.set_keep_alive(Duration::from_secs(config.keep_alive_secs));
 
         // Set clean session from config

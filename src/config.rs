@@ -105,6 +105,14 @@ pub struct NatsConfig {
     pub servers: Vec<NatsServerConfig>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MqttAuthMode {
+    #[default]
+    Basic,
+    JwtAuthCallout,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MqttServerConfig {
     pub name: String,
@@ -132,6 +140,13 @@ pub struct MqttServerConfig {
     pub username: Option<String>,
     /// Token for authentication (goes in password field)
     pub token: Option<String>,
+    /// Authentication mode: basic (username/password) or jwt_auth_callout (ES256 JWT)
+    #[serde(default)]
+    pub auth_mode: MqttAuthMode,
+    /// Identity ID for JWT auth-callout mode
+    pub identity_id: Option<String>,
+    /// Path to EC P-256 private key PEM for JWT signing
+    pub private_key_path: Option<String>,
     #[serde(default = "default_subscribe_topic")]
     pub subscribe_topic: String,
     /// QoS level for subscriptions (0, 1, or 2)
