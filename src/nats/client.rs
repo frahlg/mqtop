@@ -13,6 +13,7 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 
 use crate::config::NatsServerConfig;
+use crate::config::DEFAULT_MAX_STORED_PAYLOAD_SIZE_BYTES;
 use crate::mqtt::resilience::{BackoffStrategy, ConnectionHealth};
 use crate::mqtt::{ConnectionState, MqttEvent, MqttMessage};
 
@@ -41,6 +42,15 @@ impl NatsClient {
     pub async fn connect(
         config: NatsServerConfig,
         event_tx: mpsc::UnboundedSender<MqttEvent>,
+    ) -> Result<Self> {
+        Self::connect_with_payload_limit(config, event_tx, DEFAULT_MAX_STORED_PAYLOAD_SIZE_BYTES)
+            .await
+    }
+
+    pub async fn connect_with_payload_limit(
+        config: NatsServerConfig,
+        event_tx: mpsc::UnboundedSender<MqttEvent>,
+        max_stored_payload_size_bytes: usize,
     ) -> Result<Self> {
         let _ = event_tx.send(MqttEvent::StateChange(ConnectionState::Connecting));
 
@@ -73,7 +83,12 @@ impl NatsClient {
         let shutdown = Arc::new(AtomicBool::new(false));
         let shutdown_notify = Arc::new(Notify::new());
 
-        let read_handle = spawn_read_loop(reader, event_tx.clone(), cmd_tx);
+        let read_handle = spawn_read_loop(
+            reader,
+            event_tx.clone(),
+            cmd_tx,
+            max_stored_payload_size_bytes,
+        );
         let write_handle = spawn_write_loop(writer, cmd_rx);
 
         // Spawn supervisor for reconnection.
@@ -91,6 +106,7 @@ impl NatsClient {
                     write_handle,
                     shutdown,
                     shutdown_notify,
+                    max_stored_payload_size_bytes,
                 )
                 .await;
             });
@@ -153,6 +169,7 @@ async fn supervisor_loop(
     mut write_handle: JoinHandle<()>,
     shutdown: Arc<AtomicBool>,
     shutdown_notify: Arc<Notify>,
+    max_stored_payload_size_bytes: usize,
 ) {
     let mut health = ConnectionHealth::new(BackoffStrategy::default());
     health.record_success(); // First connection already succeeded.
@@ -218,7 +235,14 @@ async fn supervisor_loop(
         }
 
         // Attempt reconnection.
-        match try_reconnect(&config, &event_tx, &cmd_tx_shared).await {
+        match try_reconnect(
+            &config,
+            &event_tx,
+            &cmd_tx_shared,
+            max_stored_payload_size_bytes,
+        )
+        .await
+        {
             Ok((rh, wh)) => {
                 health.record_success();
                 read_handle = rh;
@@ -238,6 +262,7 @@ async fn try_reconnect(
     config: &NatsServerConfig,
     event_tx: &mpsc::UnboundedSender<MqttEvent>,
     cmd_tx_shared: &Arc<RwLock<mpsc::UnboundedSender<Command>>>,
+    max_stored_payload_size_bytes: usize,
 ) -> Result<(JoinHandle<()>, JoinHandle<()>)> {
     let stream = connect_stream(config).await?;
     let (reader, writer) = perform_handshake(stream, config).await?;
@@ -253,7 +278,12 @@ async fn try_reconnect(
     // Swap the shared sender so new publish() calls use the fresh channel.
     *cmd_tx_shared.write().await = cmd_tx.clone();
 
-    let read_handle = spawn_read_loop(reader, event_tx.clone(), cmd_tx);
+    let read_handle = spawn_read_loop(
+        reader,
+        event_tx.clone(),
+        cmd_tx,
+        max_stored_payload_size_bytes,
+    );
     let write_handle = spawn_write_loop(writer, cmd_rx);
 
     Ok((read_handle, write_handle))
@@ -455,9 +485,10 @@ fn spawn_read_loop(
     reader: BufReader<tokio::io::ReadHalf<Box<dyn AsyncReadWrite + Unpin + Send>>>,
     event_tx: mpsc::UnboundedSender<MqttEvent>,
     cmd_tx: mpsc::UnboundedSender<Command>,
+    max_stored_payload_size_bytes: usize,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
-        if let Err(err) = read_loop(reader, event_tx, cmd_tx).await {
+        if let Err(err) = read_loop(reader, event_tx, cmd_tx, max_stored_payload_size_bytes).await {
             error!("NATS read loop stopped: {:?}", err);
         }
     })
@@ -523,6 +554,7 @@ async fn read_loop<R: AsyncRead + Unpin>(
     mut reader: BufReader<R>,
     event_tx: mpsc::UnboundedSender<MqttEvent>,
     cmd_tx: mpsc::UnboundedSender<Command>,
+    max_stored_payload_size_bytes: usize,
 ) -> Result<()> {
     loop {
         let line = read_op_line(&mut reader).await?;
@@ -551,7 +583,13 @@ async fn read_loop<R: AsyncRead + Unpin>(
             let mut crlf = [0u8; 2];
             reader.read_exact(&mut crlf).await?;
 
-            let msg = MqttMessage::new(subject, payload, 0, false);
+            let msg = MqttMessage::new_with_payload_limit(
+                subject,
+                &payload,
+                0,
+                false,
+                max_stored_payload_size_bytes,
+            );
             let _ = event_tx.send(MqttEvent::Message(msg));
             continue;
         }
@@ -570,7 +608,13 @@ async fn read_loop<R: AsyncRead + Unpin>(
             } else {
                 Vec::new()
             };
-            let msg = MqttMessage::new(subject, payload, 0, false);
+            let msg = MqttMessage::new_with_payload_limit(
+                subject,
+                &payload,
+                0,
+                false,
+                max_stored_payload_size_bytes,
+            );
             let _ = event_tx.send(MqttEvent::Message(msg));
             continue;
         }
@@ -776,7 +820,13 @@ mod tests {
         let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel();
 
         // read_loop will fail after PING because stream ends, but Pong command should be sent
-        let _ = read_loop(reader, event_tx, cmd_tx).await;
+        let _ = read_loop(
+            reader,
+            event_tx,
+            cmd_tx,
+            DEFAULT_MAX_STORED_PAYLOAD_SIZE_BYTES,
+        )
+        .await;
 
         match cmd_rx.try_recv() {
             Ok(Command::Pong) => {} // expected
@@ -791,7 +841,13 @@ mod tests {
         let (event_tx, mut event_rx) = mpsc::unbounded_channel();
         let (cmd_tx, _cmd_rx) = mpsc::unbounded_channel();
 
-        let _ = read_loop(reader, event_tx, cmd_tx).await;
+        let _ = read_loop(
+            reader,
+            event_tx,
+            cmd_tx,
+            DEFAULT_MAX_STORED_PAYLOAD_SIZE_BYTES,
+        )
+        .await;
 
         // Should have received a Message event
         let mut found_msg = false;

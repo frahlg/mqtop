@@ -136,6 +136,12 @@ fn create_message_item(msg: &MqttMessage, _is_selected: bool) -> ListItem<'stati
     }
 
     spans.push(Span::raw(preview));
+    if msg.is_payload_truncated() {
+        spans.push(Span::styled(
+            " [truncated]",
+            Style::default().fg(Color::Yellow),
+        ));
+    }
 
     ListItem::new(Line::from(spans))
 }
@@ -156,8 +162,20 @@ fn render_payload_detail(frame: &mut Frame, app: &App, msg: &MqttMessage, area: 
         ),
         Span::raw(" "),
         Span::styled(
-            format!("{} bytes", msg.payload_size()),
-            Style::default().fg(Color::DarkGray),
+            if msg.is_payload_truncated() {
+                format!(
+                    "{} of {} bytes (TRUNCATED)",
+                    msg.stored_payload_size(),
+                    msg.payload_size()
+                )
+            } else {
+                format!("{} bytes", msg.payload_size())
+            },
+            if msg.is_payload_truncated() {
+                Style::default().fg(Color::Yellow)
+            } else {
+                Style::default().fg(Color::DarkGray)
+            },
         ),
         if msg.retain {
             Span::styled(" RETAINED", Style::default().fg(Color::Yellow))

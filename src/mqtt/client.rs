@@ -3,7 +3,8 @@
 use anyhow::{Context, Result};
 use rumqttc::tokio_rustls::rustls::{self, ClientConfig, RootCertStore};
 use rumqttc::{
-    AsyncClient, Event, LastWill, MqttOptions, Packet, QoS, TlsConfiguration, Transport,
+    AsyncClient, ConnectionError, Event, LastWill, MqttOptions, Packet, QoS, StateError,
+    TlsConfiguration, Transport,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,7 +12,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, error, info, warn};
 
-use crate::config::MqttServerConfig;
+use crate::config::{MqttServerConfig, DEFAULT_MAX_STORED_PAYLOAD_SIZE_BYTES};
 use crate::mqtt::message::MqttMessage;
 use crate::mqtt::resilience::{BackoffStrategy, ConnectionHealth};
 
@@ -53,6 +54,35 @@ impl MqttClient {
         event_tx: mpsc::UnboundedSender<MqttEvent>,
         backoff: BackoffStrategy,
     ) -> Result<Self> {
+        Self::connect_with_backoff_and_payload_limit(
+            config,
+            event_tx,
+            backoff,
+            DEFAULT_MAX_STORED_PAYLOAD_SIZE_BYTES,
+        )
+        .await
+    }
+
+    pub async fn connect_with_payload_limit(
+        config: MqttServerConfig,
+        event_tx: mpsc::UnboundedSender<MqttEvent>,
+        max_stored_payload_size_bytes: usize,
+    ) -> Result<Self> {
+        Self::connect_with_backoff_and_payload_limit(
+            config,
+            event_tx,
+            BackoffStrategy::default(),
+            max_stored_payload_size_bytes,
+        )
+        .await
+    }
+
+    async fn connect_with_backoff_and_payload_limit(
+        config: MqttServerConfig,
+        event_tx: mpsc::UnboundedSender<MqttEvent>,
+        backoff: BackoffStrategy,
+        max_stored_payload_size_bytes: usize,
+    ) -> Result<Self> {
         let config = Arc::new(config);
         let health = Arc::new(RwLock::new(ConnectionHealth::new(backoff)));
 
@@ -93,8 +123,7 @@ impl MqttClient {
         // Increase capacity for high-throughput scenarios
         mqttoptions.set_inflight(100);
 
-        // Increase max packet size for large payloads (default is 10KB, set to 1MB)
-        mqttoptions.set_max_packet_size(1024 * 1024, 1024 * 1024);
+        mqttoptions.set_max_packet_size(config.max_packet_size_bytes, 1024 * 1024);
 
         let (client, mut eventloop) = AsyncClient::new(mqttoptions, 1000);
 
@@ -109,6 +138,7 @@ impl MqttClient {
         let client_clone = client.clone();
         let use_exact_client_id = config.use_exact_client_id;
         let keep_alive_secs = config.keep_alive_secs;
+        let max_packet_size_bytes = config.max_packet_size_bytes;
 
         // Spawn the event loop handler
         tokio::spawn(async move {
@@ -117,11 +147,12 @@ impl MqttClient {
                     Ok(notification) => {
                         match notification {
                             Event::Incoming(Packet::Publish(publish)) => {
-                                let msg = MqttMessage::new(
+                                let msg = MqttMessage::new_with_payload_limit(
                                     publish.topic.to_string(),
-                                    publish.payload.to_vec(),
+                                    &publish.payload,
                                     publish.qos as u8,
                                     publish.retain,
+                                    max_stored_payload_size_bytes,
                                 );
                                 let _ = event_tx_clone.send(MqttEvent::Message(msg));
                             }
@@ -163,6 +194,17 @@ impl MqttClient {
                     }
                     Err(e) => {
                         let error_str = format!("{:?}", e);
+                        if let Some(packet_size) = payload_size_limit_error_size(&e) {
+                            let message = format!(
+                                "Incoming MQTT packet is too large ({packet_size} bytes; configured max_packet_size_bytes is {max_packet_size_bytes}). Increase max_packet_size_bytes in the server configuration. Automatic reconnect stopped to avoid a retained-message reconnect loop."
+                            );
+                            error!("{}", message);
+                            health_clone.write().await.record_failure(message.clone());
+                            let _ = event_tx_clone.send(MqttEvent::Error(message));
+                            let _ = event_tx_clone
+                                .send(MqttEvent::StateChange(ConnectionState::Disconnected));
+                            break;
+                        }
                         error!("MQTT connection error: {}", error_str);
 
                         let mut health = health_clone.write().await;
@@ -373,6 +415,36 @@ impl MqttClient {
             // Append timestamp suffix for reconnect safety
             format!("{}-{}", configured_id, timestamp)
         }
+    }
+}
+
+fn payload_size_limit_error_size(error: &ConnectionError) -> Option<usize> {
+    match error {
+        ConnectionError::MqttState(StateError::Deserialization(
+            rumqttc::mqttbytes::Error::PayloadSizeLimitExceeded(size),
+        )) => Some(*size),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{payload_size_limit_error_size, ConnectionError, StateError};
+
+    #[test]
+    fn identifies_oversized_packet_error_and_size() {
+        let error = ConnectionError::MqttState(StateError::Deserialization(
+            rumqttc::mqttbytes::Error::PayloadSizeLimitExceeded(10_025_652),
+        ));
+        assert_eq!(payload_size_limit_error_size(&error), Some(10_025_652));
+    }
+
+    #[test]
+    fn ignores_other_errors() {
+        assert_eq!(
+            payload_size_limit_error_size(&ConnectionError::NetworkTimeout),
+            None
+        );
     }
 }
 

@@ -7,7 +7,9 @@ use anyhow::{anyhow, Context, Result};
 use crossterm::event::{KeyCode, KeyModifiers};
 
 use crate::broker::BrokerKind;
-use crate::config::{Config, MqttServerConfig, NatsServerConfig, CONFIG_BACKUP_LIMIT};
+use crate::config::{
+    Config, MqttServerConfig, NatsServerConfig, CONFIG_BACKUP_LIMIT, DEFAULT_MAX_PACKET_SIZE_BYTES,
+};
 use crate::mqtt::{ConnectionState, MqttEvent, MqttMessage};
 use crate::persistence::{Bookmark, UserData};
 use crate::state::metric_tracker::topic_matches;
@@ -176,6 +178,7 @@ pub struct ServerEditState {
     pub subscribe_topic: String,
     pub subscribe_qos: String,
     pub keep_alive_secs: String,
+    pub max_packet_size_bytes: String,
     // Session
     pub clean_session: bool,
     // Last Will
@@ -244,6 +247,7 @@ pub enum ServerField {
     SubscribeTopic,
     SubscribeQos,
     KeepAlive,
+    MaxPacketSize,
     // Session
     CleanSession,
     // LWT
@@ -284,6 +288,7 @@ impl Default for ServerEditState {
             subscribe_topic: String::new(),
             subscribe_qos: String::new(),
             keep_alive_secs: String::new(),
+            max_packet_size_bytes: String::new(),
             clean_session: true,
             lwt_topic: String::new(),
             lwt_payload: String::new(),
@@ -450,7 +455,7 @@ impl BookmarkField {
 }
 
 impl ServerField {
-    pub const ALL: [ServerField; 20] = [
+    pub const ALL: [ServerField; 21] = [
         // Basic
         ServerField::Name,
         ServerField::Host,
@@ -471,6 +476,7 @@ impl ServerField {
         ServerField::SubscribeTopic,
         ServerField::SubscribeQos,
         ServerField::KeepAlive,
+        ServerField::MaxPacketSize,
         // Session
         ServerField::CleanSession,
         // LWT
@@ -497,6 +503,7 @@ impl ServerField {
             ServerField::SubscribeTopic => "Subscribe",
             ServerField::SubscribeQos => "Sub QoS",
             ServerField::KeepAlive => "Keep Alive",
+            ServerField::MaxPacketSize => "Packet Limit",
             ServerField::CleanSession => "Clean Sess",
             ServerField::LwtTopic => "LWT Topic",
             ServerField::LwtPayload => "LWT Payload",
@@ -672,18 +679,17 @@ impl App {
             MqttEvent::Message(msg) => {
                 self.stats.record_message(msg.payload_size());
                 self.topic_tree.insert(&msg.topic, msg.payload_size());
-                // Process for metric tracking
-                self.metric_tracker
-                    .process_message(&msg.topic, &msg.payload);
                 // Process for device health tracking
                 self.device_tracker
                     .process_message(&msg.topic, msg.payload_size());
-                // Process for latency tracking
-                self.latency_tracker.record_message(&msg.payload);
-                // Process for schema tracking (silent - no notifications)
-                let _ = self
-                    .schema_tracker
-                    .process_message(&msg.topic, &msg.payload);
+                if !msg.is_payload_truncated() {
+                    self.metric_tracker
+                        .process_message(&msg.topic, &msg.payload);
+                    self.latency_tracker.record_message(&msg.payload);
+                    let _ = self
+                        .schema_tracker
+                        .process_message(&msg.topic, &msg.payload);
+                }
                 self.message_buffer.push(msg);
             }
             MqttEvent::StateChange(state) => {
@@ -863,6 +869,13 @@ impl App {
                     output.push_str(text);
                 } else {
                     output.push_str(&format!("(binary {} bytes)", msg.payload_size()));
+                }
+                if msg.is_payload_truncated() {
+                    output.push_str(&format!(
+                        "\n[Payload truncated: showing {} of {} bytes]",
+                        msg.stored_payload_size(),
+                        msg.payload_size()
+                    ));
                 }
             } else {
                 output.push_str("(no message)");
@@ -1968,6 +1981,7 @@ impl App {
             self.server_edit.subscribe_topic = server.subscribe_topic.clone();
             self.server_edit.subscribe_qos = server.subscribe_qos.to_string();
             self.server_edit.keep_alive_secs = server.keep_alive_secs.to_string();
+            self.server_edit.max_packet_size_bytes = server.max_packet_size_bytes.to_string();
             // Session
             self.server_edit.clean_session = server.clean_session;
             // LWT
@@ -1998,6 +2012,7 @@ impl App {
             self.server_edit.subscribe_topic = "#".to_string();
             self.server_edit.subscribe_qos = "1".to_string();
             self.server_edit.keep_alive_secs = "30".to_string();
+            self.server_edit.max_packet_size_bytes = DEFAULT_MAX_PACKET_SIZE_BYTES.to_string();
             // Session
             self.server_edit.clean_session = true;
             // LWT
@@ -2101,6 +2116,7 @@ impl App {
             ServerField::SubscribeTopic => &mut self.server_edit.subscribe_topic,
             ServerField::SubscribeQos => &mut self.server_edit.subscribe_qos,
             ServerField::KeepAlive => &mut self.server_edit.keep_alive_secs,
+            ServerField::MaxPacketSize => &mut self.server_edit.max_packet_size_bytes,
             ServerField::CleanSession => &mut self.server_edit.host, // dummy, not used for checkbox
             ServerField::LwtTopic => &mut self.server_edit.lwt_topic,
             ServerField::LwtPayload => &mut self.server_edit.lwt_payload,
@@ -2187,6 +2203,7 @@ impl App {
             ServerField::SubscribeTopic => self.server_edit.subscribe_topic.clone(),
             ServerField::SubscribeQos => self.server_edit.subscribe_qos.clone(),
             ServerField::KeepAlive => self.server_edit.keep_alive_secs.clone(),
+            ServerField::MaxPacketSize => self.server_edit.max_packet_size_bytes.clone(),
             ServerField::CleanSession => {
                 if self.server_edit.clean_session {
                     "on".to_string()
@@ -2238,6 +2255,12 @@ impl App {
             .trim()
             .parse()
             .context("Keep alive must be a number")?;
+        let max_packet_size_bytes: usize = self
+            .server_edit
+            .max_packet_size_bytes
+            .trim()
+            .parse()
+            .context("Packet limit must be a number")?;
         let subscribe_qos: u8 = self
             .server_edit
             .subscribe_qos
@@ -2287,6 +2310,7 @@ impl App {
             },
             subscribe_qos,
             keep_alive_secs,
+            max_packet_size_bytes,
             mqtt_version: 3, // MQTT 5.0 not yet implemented
             clean_session: self.server_edit.clean_session,
             lwt_topic: if self.server_edit.lwt_topic.trim().is_empty() {
@@ -2327,8 +2351,13 @@ impl App {
         if server.port == 0 {
             return Err(anyhow!("Port must be greater than 0"));
         }
+        if max_packet_size_bytes == 0 {
+            return Err(anyhow!("Packet limit must be greater than 0"));
+        }
 
         let prev_active = self.config.mqtt.active_server.clone();
+        let reconnect_active_server = !self.server_edit.is_new
+            && self.config.mqtt.active_index() == Some(self.server_edit.index);
         if self.server_edit.is_new {
             self.config.mqtt.servers.push(server);
             self.server_manager_index = self.config.mqtt.servers.len().saturating_sub(1);
@@ -2343,7 +2372,7 @@ impl App {
         }
 
         self.save_config()?;
-        if prev_active != self.config.mqtt.active_server {
+        if prev_active != self.config.mqtt.active_server || reconnect_active_server {
             if let Some(index) = self.config.mqtt.active_index() {
                 self.pending_server_switch = Some(PendingServerSwitch {
                     kind: BrokerKind::Mqtt,
@@ -2674,7 +2703,7 @@ impl App {
 
     /// Get formatted payload for a message
     pub fn format_payload(&self, msg: &MqttMessage) -> String {
-        match self.payload_mode {
+        let payload = match self.payload_mode {
             PayloadMode::Auto => {
                 if let Some(json) = msg.payload_json_pretty() {
                     json
@@ -2692,6 +2721,15 @@ impl App {
             PayloadMode::Json => msg
                 .payload_json_pretty()
                 .unwrap_or_else(|| "<not valid JSON>".to_string()),
+        };
+        if msg.is_payload_truncated() {
+            format!(
+                "{payload}\n\n[Payload truncated: showing {} of {} bytes]",
+                msg.stored_payload_size(),
+                msg.payload_size()
+            )
+        } else {
+            payload
         }
     }
 

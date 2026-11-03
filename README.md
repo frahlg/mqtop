@@ -214,6 +214,7 @@ use_tls = true
 client_id = "mqtop-prod"
 subscribe_topic = "#"
 keep_alive_secs = 30
+max_packet_size_bytes = 16777216 # Incoming packet cap (16 MiB)
 
 [nats]
 active_server = "ops"
@@ -227,6 +228,7 @@ subscribe_subject = ">"
 
 [ui]
 message_buffer_size = 100    # Messages per topic
+max_stored_payload_size_bytes = 65536 # Keep at most 64 KiB per message
 stats_window_secs = 10       # Rate calculation window
 tick_rate_ms = 100           # UI refresh rate
 
@@ -241,6 +243,11 @@ color = "red"
 ```
 
 Servers added via the UI are automatically saved to the config file.
+
+Incoming MQTT packets larger than `max_packet_size_bytes` stop automatic
+reconnects and report the packet size, preventing an endless reconnect loop on
+retained messages. The UI retains at most `max_stored_payload_size_bytes` from
+each message; truncated payloads are marked and show their original size.
 
 Note: `creds_file` for NATS is parsed in config but currently not supported by the built-in NATS client. Use `username`/`token` for now.
 

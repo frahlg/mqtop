@@ -25,7 +25,10 @@ use tracing_subscriber::FmtSubscriber;
 
 use app::App;
 use broker::BrokerKind;
-use config::{Config, MqttConfig, MqttServerConfig, NatsConfig, CONFIG_BACKUP_LIMIT};
+use config::{
+    Config, MqttConfig, MqttServerConfig, NatsConfig, CONFIG_BACKUP_LIMIT,
+    DEFAULT_MAX_PACKET_SIZE_BYTES,
+};
 use mqtt::{MqttClient, MqttEvent};
 use nats::NatsClient;
 
@@ -150,6 +153,7 @@ fn run_config_wizard(config_path: &PathBuf) -> Result<Config> {
         },
         subscribe_qos: 1,
         keep_alive_secs,
+        max_packet_size_bytes: DEFAULT_MAX_PACKET_SIZE_BYTES,
         mqtt_version: 3,
         clean_session: true,
         lwt_topic: None,
@@ -177,9 +181,13 @@ async fn connect_mqtt(app: &App, mqtt_tx: mpsc::UnboundedSender<MqttEvent>) -> R
         .active_mqtt_server()
         .context("Active MQTT server missing")?
         .clone();
-    MqttClient::connect(server, mqtt_tx)
-        .await
-        .context("Failed to connect to MQTT broker")
+    MqttClient::connect_with_payload_limit(
+        server,
+        mqtt_tx,
+        app.config.ui.max_stored_payload_size_bytes,
+    )
+    .await
+    .context("Failed to connect to MQTT broker")
 }
 
 enum Client {
@@ -223,9 +231,13 @@ async fn connect_client(
                 .context("Active NATS server missing")?
                 .clone();
             Ok(Client::Nats(
-                NatsClient::connect(server, tx)
-                    .await
-                    .context("Failed to connect to NATS server")?,
+                NatsClient::connect_with_payload_limit(
+                    server,
+                    tx,
+                    app.config.ui.max_stored_payload_size_bytes,
+                )
+                .await
+                .context("Failed to connect to NATS server")?,
             ))
         }
     }

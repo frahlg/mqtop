@@ -139,6 +139,9 @@ pub struct MqttServerConfig {
     pub subscribe_qos: u8,
     #[serde(default = "default_keep_alive")]
     pub keep_alive_secs: u64,
+    /// Maximum size of an incoming MQTT packet in bytes
+    #[serde(default = "default_max_packet_size")]
+    pub max_packet_size_bytes: usize,
     /// MQTT protocol version (3 = 3.1.1, 5 = 5.0)
     #[serde(default = "default_mqtt_version")]
     pub mqtt_version: u8,
@@ -161,6 +164,9 @@ pub struct MqttServerConfig {
 pub struct UiConfig {
     #[serde(default = "default_message_buffer_size")]
     pub message_buffer_size: usize,
+    /// Maximum number of payload bytes retained for display per message
+    #[serde(default = "default_max_stored_payload_size")]
+    pub max_stored_payload_size_bytes: usize,
     #[serde(default = "default_stats_window")]
     pub stats_window_secs: u64,
     #[serde(default = "default_tick_rate")]
@@ -177,6 +183,7 @@ impl Default for UiConfig {
     fn default() -> Self {
         Self {
             message_buffer_size: default_message_buffer_size(),
+            max_stored_payload_size_bytes: default_max_stored_payload_size(),
             stats_window_secs: default_stats_window(),
             tick_rate_ms: default_tick_rate(),
             topic_colors: Vec::new(),
@@ -203,6 +210,17 @@ fn default_nats_subscribe_subject() -> String {
 
 fn default_keep_alive() -> u64 {
     30
+}
+
+pub const DEFAULT_MAX_PACKET_SIZE_BYTES: usize = 16 * 1024 * 1024;
+pub const DEFAULT_MAX_STORED_PAYLOAD_SIZE_BYTES: usize = 64 * 1024;
+
+fn default_max_packet_size() -> usize {
+    DEFAULT_MAX_PACKET_SIZE_BYTES
+}
+
+fn default_max_stored_payload_size() -> usize {
+    DEFAULT_MAX_STORED_PAYLOAD_SIZE_BYTES
 }
 
 fn default_qos() -> u8 {
@@ -396,6 +414,12 @@ impl Config {
                     server.name
                 );
             }
+            if server.max_packet_size_bytes == 0 {
+                bail!(
+                    "MQTT max_packet_size_bytes must be greater than 0 (server: {})",
+                    server.name
+                );
+            }
         }
         Ok(())
     }
@@ -534,5 +558,57 @@ impl NatsServerConfig {
 
     pub fn get_token(&self) -> &str {
         self.token.as_deref().unwrap_or("")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn older_configurations_receive_new_payload_limit_defaults() {
+        let config: Config = toml::from_str(
+            r#"
+                [mqtt]
+                active_server = "default"
+
+                [[mqtt.servers]]
+                name = "default"
+                host = "localhost"
+                client_id = "mqtop"
+
+                [ui]
+                message_buffer_size = 100
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            config.mqtt.servers[0].max_packet_size_bytes,
+            DEFAULT_MAX_PACKET_SIZE_BYTES
+        );
+        assert_eq!(
+            config.ui.max_stored_payload_size_bytes,
+            DEFAULT_MAX_STORED_PAYLOAD_SIZE_BYTES
+        );
+    }
+
+    #[test]
+    fn zero_mqtt_packet_limit_is_rejected() {
+        let config: Config = toml::from_str(
+            r#"
+                [mqtt]
+                active_server = "default"
+
+                [[mqtt.servers]]
+                name = "default"
+                host = "localhost"
+                client_id = "mqtop"
+                max_packet_size_bytes = 0
+            "#,
+        )
+        .unwrap();
+
+        assert!(config.validate().is_err());
     }
 }

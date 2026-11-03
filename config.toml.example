@@ -80,6 +80,11 @@ subscribe_topic = "#"
 # Broker will disconnect if no packets received within 1.5x this interval
 keep_alive_secs = 30
 
+# Maximum incoming MQTT packet size in bytes (default: 16 MiB)
+# Increase this if the broker sends larger packets. A packet over this limit
+# stops automatic reconnects to avoid a loop with retained messages.
+max_packet_size_bytes = 16777216
+
 # ============================================================================
 # Session Options
 # ============================================================================
@@ -163,6 +168,10 @@ subscribe_subject = ">"
 # Number of messages to buffer per topic
 # Higher values use more memory but allow scrolling through history
 message_buffer_size = 100
+
+# Maximum payload bytes retained and displayed per message (default: 64 KiB)
+# Oversized payloads are truncated; the UI marks them and reports the original size.
+max_stored_payload_size_bytes = 65536
 
 # Time window for rate calculations (messages/sec, bytes/sec)
 # Shorter windows are more responsive, longer windows are smoother
