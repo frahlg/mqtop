@@ -1,5 +1,6 @@
 mod app;
 mod broker;
+mod clipboard;
 mod config;
 mod mqtt;
 mod nats;
