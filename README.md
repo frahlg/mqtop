@@ -44,7 +44,7 @@ The universe, as has been observed, operates on certain immutable rules. So does
 - **Starred topics** - Bookmark the important ones, forget the rest
 - **Publish bookmarks** - Save your favorite messages for rapid-fire testing
 - **Publishing** - Send MQTT topics or NATS subjects directly, no external tools required
-- **Clipboard support** - Copy topics and payloads to share the joy
+- **Clipboard support** - Copy topics and payloads to share the joy; works over SSH via OSC 52 (kitty, WezTerm, Alacritty, iTerm2, foot, Windows Terminal; tmux needs `set -g set-clipboard on`)
 - **JSON syntax highlighting** - Pretty colors for pretty data
 - **Vim-style navigation** - `hjkl` for those who have Seen The Light
 - **Resilient connection** - Auto-reconnect with exponential backoff, because hope springs eternal

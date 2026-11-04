@@ -781,19 +781,17 @@ impl App {
 
     /// Copy current topic to clipboard
     pub fn copy_topic(&mut self) {
-        if let Some(topic) = &self.selected_topic {
-            match arboard::Clipboard::new() {
-                Ok(mut clipboard) => {
-                    if clipboard.set_text(topic.clone()).is_ok() {
-                        self.set_status("Topic copied to clipboard");
-                    } else {
-                        self.set_status("Failed to copy topic");
-                    }
-                }
-                Err(_) => self.set_status("Clipboard unavailable"),
-            }
+        if let Some(topic) = self.selected_topic.clone() {
+            self.copy_to_clipboard(&topic, "Topic");
         } else {
             self.set_status("No topic selected");
+        }
+    }
+
+    fn copy_to_clipboard(&mut self, text: &str, what: &str) {
+        match crate::clipboard::copy_text(text) {
+            Ok(via) => self.set_status(&format!("{} copied to {}", what, via)),
+            Err(e) => self.set_status(e),
         }
     }
 
@@ -802,16 +800,7 @@ impl App {
         let messages = self.get_current_messages();
         if let Some(msg) = messages.first() {
             let payload = self.format_payload(msg);
-            match arboard::Clipboard::new() {
-                Ok(mut clipboard) => {
-                    if clipboard.set_text(payload).is_ok() {
-                        self.set_status("Payload copied to clipboard");
-                    } else {
-                        self.set_status("Failed to copy payload");
-                    }
-                }
-                Err(_) => self.set_status("Clipboard unavailable"),
-            }
+            self.copy_to_clipboard(&payload, "Payload");
         } else {
             self.set_status("No message to copy");
         }
